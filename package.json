@@ -1,0 +1,61 @@
+{
+  "name": "ant-browser-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Ant Browser — Electron + React + Node（从 Wails/Go 迁移）。目录对齐原 Ant-Browser 仓库结构。",
+  "main": "dist-electron/main/index.js",
+  "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "lint": "tsc --noEmit -p backend/tsconfig.json && tsc --noEmit -p frontend/tsconfig.json",
+    "smoke:runtime": "node scripts/smoke-runtime-check.mjs"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.17",
+    "bufferutil": "^4.1.0",
+    "clsx": "^2.1.1",
+    "electron-updater": "^6.6.2",
+    "http-proxy": "^1.18.1",
+    "http-proxy-agent": "^7.0.2",
+    "https-proxy-agent": "^7.0.6",
+    "js-yaml": "^4.1.1",
+    "lucide-react": "^0.292.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "react-router-dom": "^6.30.0",
+    "recharts": "^2.15.4",
+    "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.0",
+    "socks-proxy-agent": "^10.0.0",
+    "sql.js": "^1.13.0",
+    "utf-8-validate": "^6.0.6",
+    "ws": "^8.20.0",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@types/http-proxy": "^1.17.17",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.13.14",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@types/sql.js": "^1.4.11",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react-swc": "^4.3.0",
+    "autoprefixer": "^10.4.21",
+    "electron": "^34.5.8",
+    "electron-vite": "^3.1.0",
+    "playwright": "^1.59.1",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^6.2.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

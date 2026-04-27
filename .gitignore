@@ -1,0 +1,10 @@
+node_modules/
+dist-electron/
+dist/
+*.log
+.DS_Store
+*.local
+chrome/**
+!chrome/.gitkeep
+data/**
+!data/.gitkeep
