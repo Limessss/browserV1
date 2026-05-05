@@ -3,7 +3,7 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { access, readFile, readdir } from 'node:fs/promises'
+import { access, readFile, readdir, writeFile } from 'node:fs/promises'
 import { constants as FsConstants } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { emitWailsEvent } from '../ipc/wails-emit'
@@ -17,6 +17,20 @@ export interface PlaywrightScriptManifest {
   entry: string
   id?: string
   order?: number
+  tags?: string[]
+  version?: string
+  defaultArgs?: string[]
+  argsHint?: string
+  requiresLaunchServer?: boolean
+  mcpDoc?: string
+}
+
+export interface SavePlaywrightScriptManifestInput {
+  name: string
+  description: string
+  entry: string
+  id?: string
+  order?: number | null
   tags?: string[]
   version?: string
   defaultArgs?: string[]
@@ -151,8 +165,74 @@ export async function listPlaywrightScripts(): Promise<ListPlaywrightScriptsResu
   return { rootDir, scripts, warnings }
 }
 
-function resolveNodeCommand(): string {
-  return process.platform === 'win32' ? 'node.exe' : 'node'
+export async function savePlaywrightScriptManifest(
+  folderId: string,
+  input: unknown,
+): Promise<PlaywrightScriptItem> {
+  const fid = String(folderId ?? '').trim()
+  if (!fid || fid.includes('..') || fid.includes('/') || fid.includes('\\')) {
+    throw new Error('无效的脚本目录 id')
+  }
+
+  if (!isRecord(input)) {
+    throw new Error('manifest 参数必须是对象')
+  }
+
+  const parsed = parseManifest(input, fid)
+  if (!parsed) {
+    throw new Error('script.json 缺少必填字段 name / description / entry')
+  }
+
+  const rootDir = resolveAppRelativePath('playwright_scripts')
+  const folderDir = join(rootDir, fid)
+  const manifestPath = join(folderDir, MANIFEST_NAME)
+  const entryPath = resolve(folderDir, parsed.entry)
+  try {
+    await access(entryPath, FsConstants.R_OK)
+  } catch {
+    throw new Error(`入口文件不存在: ${parsed.entry}`)
+  }
+
+  const rawOrder = input.order
+  const normalizedOrder =
+    typeof rawOrder === 'number' && Number.isFinite(rawOrder) ? rawOrder : undefined
+  const normalized = {
+    name: parsed.name,
+    description: parsed.description,
+    entry: parsed.entry,
+    ...(parsed.id ? { id: parsed.id } : {}),
+    ...(normalizedOrder !== undefined ? { order: normalizedOrder } : {}),
+    ...(parsed.tags && parsed.tags.length > 0 ? { tags: parsed.tags } : {}),
+    ...(parsed.version ? { version: parsed.version } : {}),
+    ...(parsed.defaultArgs && parsed.defaultArgs.length > 0 ? { defaultArgs: parsed.defaultArgs } : {}),
+    ...(parsed.argsHint ? { argsHint: parsed.argsHint } : {}),
+    ...(parsed.requiresLaunchServer ? { requiresLaunchServer: true } : {}),
+    ...(parsed.mcpDoc ? { mcpDoc: parsed.mcpDoc } : {}),
+  }
+
+  await writeFile(manifestPath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
+  return {
+    ...parsed,
+    order: normalizedOrder,
+    folderId: fid,
+    manifestPath,
+    entryPath,
+  }
+}
+
+function resolveNodeRunner(): { command: string; extraEnv?: Record<string, string> } {
+  /**
+   * 在打包 Electron 应用里，目标机器通常没有全局 node/node.exe。
+   * 这里使用当前可执行文件并开启 ELECTRON_RUN_AS_NODE，让 Electron 以 Node 模式执行脚本。
+   */
+  const execPath = process.execPath
+  if (execPath && execPath.trim().length > 0) {
+    return {
+      command: execPath,
+      extraEnv: { ELECTRON_RUN_AS_NODE: '1' },
+    }
+  }
+  return { command: process.platform === 'win32' ? 'node.exe' : 'node' }
 }
 
 export async function runPlaywrightScript(
@@ -180,12 +260,12 @@ export async function runPlaywrightScript(
   // 故「自动化页」的附加参数必须排在 script.json 的 defaultArgs **之前**，
   // 否则 --shop_region 等会被默认里的值盖住（先出现的是 PH，用户填的 MY 被忽略）。
   const args = [script.entryPath, ...extra, ...(script.defaultArgs ?? [])]
-  const nodeCmd = resolveNodeCommand()
+  const nodeRunner = resolveNodeRunner()
   const runId = randomUUID()
 
-  const child = spawn(nodeCmd, args, {
+  const child = spawn(nodeRunner.command, args, {
     cwd: appRoot,
-    env: { ...process.env },
+    env: { ...process.env, ...(nodeRunner.extraEnv ?? {}) },
     windowsHide: true,
     shell: false,
   })

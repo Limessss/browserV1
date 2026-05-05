@@ -106,9 +106,14 @@ import {
   killPlaywrightScriptRun,
   listPlaywrightScripts,
   runPlaywrightScript,
+  savePlaywrightScriptManifest,
 } from '../internal/playwright-scripts-service'
 import { getSqlite } from '../internal/database/sqlite-store'
-import { openCorePathInExplorer, openUserDataDir } from '../internal/fs-open'
+import {
+  openCorePathInExplorer,
+  openPlaywrightScriptPathInExplorer,
+  openUserDataDir,
+} from '../internal/fs-open'
 import { invokeGoMock } from './go-mock'
 
 function appVersion(): string {
@@ -331,6 +336,14 @@ export async function invokeGoCall(method: string, args: unknown[]): Promise<unk
       throw e instanceof Error ? e : new Error(String(e))
     }
   }
+  if (method === 'SavePlaywrightScriptManifest') {
+    try {
+      return await savePlaywrightScriptManifest(String(args[0] ?? ''), args[1])
+    } catch (e) {
+      console.error('[go-call]', method, e)
+      throw e instanceof Error ? e : new Error(String(e))
+    }
+  }
   if (method === 'BackupGetScopeDefinition') {
     return backupGetScopeDefinition()
   }
@@ -363,6 +376,18 @@ export async function invokeGoCall(method: string, args: unknown[]): Promise<unk
   if (method === 'OpenCorePath') {
     try {
       await openCorePathInExplorer(String(args[0] ?? ''))
+      return undefined
+    } catch (e) {
+      console.error('[go-call]', method, e)
+      if (e instanceof Error) {
+        throw e
+      }
+      throw new Error(String(e))
+    }
+  }
+  if (method === 'OpenPlaywrightScriptPath') {
+    try {
+      await openPlaywrightScriptPathInExplorer(String(args[0] ?? ''), String(args[1] ?? ''))
       return undefined
     } catch (e) {
       console.error('[go-call]', method, e)

@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, RefreshCw, Square, Terminal } from 'lucide-react'
-import { Button, Card, Input, toast } from '../../../shared/components'
+import { AlertTriangle, FolderOpen, Pencil, RefreshCw, Square, Terminal } from 'lucide-react'
+import { Button, Card, FormItem, Input, Modal, Switch, Textarea, toast } from '../../../shared/components'
 import {
   fetchLaunchServerInfo,
   fetchPlaywrightScripts,
   killPlaywrightScriptRunApi,
   runPlaywrightScriptApi,
   type LaunchServerInfo,
+  type PlaywrightScriptManifestInput,
   type PlaywrightScriptMeta,
   type PlaywrightScriptsListPayload,
+  openPlaywrightScriptPath,
+  savePlaywrightScriptManifestApi,
 } from '../api'
 
 function splitExtraArgs(line: string): string[] {
@@ -31,8 +34,102 @@ export function PlaywrightScriptsPage() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
   const [runningFolderId, setRunningFolderId] = useState<string | null>(null)
   const [lastExitCode, setLastExitCode] = useState<number | null>(null)
+  const [editingScript, setEditingScript] = useState<PlaywrightScriptMeta | null>(null)
+  const [savingManifest, setSavingManifest] = useState(false)
+  const [manifestForm, setManifestForm] = useState({
+    name: '',
+    description: '',
+    entry: '',
+    id: '',
+    order: '',
+    tags: '',
+    version: '',
+    defaultArgs: '',
+    argsHint: '',
+    requiresLaunchServer: false,
+    mcpDoc: '',
+  })
   const activeRunIdRef = useRef<string | null>(null)
   const logEndRef = useRef<HTMLDivElement | null>(null)
+
+  const openEditModal = (script: PlaywrightScriptMeta) => {
+    setEditingScript(script)
+    setManifestForm({
+      name: script.name ?? '',
+      description: script.description ?? '',
+      entry: script.entry ?? '',
+      id: script.id ?? '',
+      order: typeof script.order === 'number' ? String(script.order) : '',
+      tags: (script.tags ?? []).join(','),
+      version: script.version ?? '',
+      defaultArgs: (script.defaultArgs ?? []).join('\n'),
+      argsHint: script.argsHint ?? '',
+      requiresLaunchServer: !!script.requiresLaunchServer,
+      mcpDoc: script.mcpDoc ?? '',
+    })
+  }
+
+  const closeEditModal = () => {
+    if (savingManifest) return
+    setEditingScript(null)
+  }
+
+  const handleOpenScriptPath = async (relativePath: string) => {
+    if (!editingScript) return
+    try {
+      const ok = await openPlaywrightScriptPath(editingScript.folderId, relativePath)
+      if (!ok) {
+        toast.error('当前环境不支持打开路径')
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '打开路径失败')
+    }
+  }
+
+  const handleSaveManifest = async () => {
+    if (!editingScript) return
+    const orderRaw = manifestForm.order.trim()
+    const orderValue = orderRaw ? Number(orderRaw) : undefined
+    if (orderRaw && !Number.isFinite(orderValue)) {
+      toast.error('排序 order 必须是数字')
+      return
+    }
+    const payload: PlaywrightScriptManifestInput = {
+      name: manifestForm.name.trim(),
+      description: manifestForm.description.trim(),
+      entry: manifestForm.entry.trim(),
+      requiresLaunchServer: manifestForm.requiresLaunchServer,
+    }
+    if (manifestForm.id.trim()) payload.id = manifestForm.id.trim()
+    if (orderValue !== undefined) payload.order = orderValue
+    if (manifestForm.tags.trim()) {
+      payload.tags = manifestForm.tags
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+    }
+    if (manifestForm.version.trim()) payload.version = manifestForm.version.trim()
+    if (manifestForm.defaultArgs.trim()) {
+      payload.defaultArgs = manifestForm.defaultArgs
+        .split('\n')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+    }
+    if (manifestForm.argsHint.trim()) payload.argsHint = manifestForm.argsHint
+    if (manifestForm.mcpDoc.trim()) payload.mcpDoc = manifestForm.mcpDoc.trim()
+
+    setSavingManifest(true)
+    try {
+      await savePlaywrightScriptManifestApi(editingScript.folderId, payload)
+      toast.success(`已保存：${editingScript.folderId}/script.json`)
+      setEditingScript(null)
+      await loadList()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setSavingManifest(false)
+    }
+  }
 
   const loadList = useCallback(async () => {
     setLoading(true)
@@ -251,6 +348,14 @@ export function PlaywrightScriptsPage() {
                   >
                     运行
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => openEditModal(s)}
+                    disabled={runningFolderId === s.folderId && activeRunId !== null}
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-1" /> 编辑
+                  </Button>
                   {runningFolderId === s.folderId && activeRunId ? (
                     <Button size="sm" variant="secondary" onClick={() => void handleKill()}>
                       <Square className="w-3.5 h-3.5 mr-1" /> 终止
@@ -285,6 +390,130 @@ export function PlaywrightScriptsPage() {
           打包分发时请将 <code>playwright_scripts</code> 目录置于可执行文件同级，或自行配置资源拷贝；开发态从项目根目录扫描。
         </p>
       </Card>
+
+      <Modal
+        open={!!editingScript}
+        onClose={closeEditModal}
+        title={editingScript ? `编辑 ${editingScript.folderId}/script.json` : '编辑 script.json'}
+        width="760px"
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeEditModal} disabled={savingManifest}>
+              取消
+            </Button>
+            <Button onClick={() => void handleSaveManifest()} disabled={savingManifest}>
+              {savingManifest ? '保存中...' : '保存'}
+            </Button>
+          </>
+        }
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <FormItem label="脚本名称" hint="name" required>
+            <Input
+              value={manifestForm.name}
+              onChange={(e) => setManifestForm((prev) => ({ ...prev, name: e.target.value }))}
+              placeholder="脚本名称"
+            />
+          </FormItem>
+          <FormItem label="入口文件" hint="entry" required>
+            <div className="flex items-center gap-2">
+              <Input
+                value={manifestForm.entry}
+                onChange={(e) => setManifestForm((prev) => ({ ...prev, entry: e.target.value }))}
+                placeholder="入口文件，例如 main.mjs"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="shrink-0 px-2"
+                title="在资源管理器中打开入口文件（不存在则打开脚本目录）"
+                onClick={() => void handleOpenScriptPath(manifestForm.entry)}
+              >
+                <FolderOpen className="w-4 h-4" />
+              </Button>
+            </div>
+          </FormItem>
+          <FormItem label="脚本 ID" hint="id">
+            <Input
+              value={manifestForm.id}
+              onChange={(e) => setManifestForm((prev) => ({ ...prev, id: e.target.value }))}
+            />
+          </FormItem>
+          <FormItem label="排序" hint="order">
+            <Input
+              value={manifestForm.order}
+              onChange={(e) => setManifestForm((prev) => ({ ...prev, order: e.target.value }))}
+              placeholder="数字，越小越靠前"
+            />
+          </FormItem>
+          <FormItem label="版本号" hint="version">
+            <Input
+              value={manifestForm.version}
+              onChange={(e) => setManifestForm((prev) => ({ ...prev, version: e.target.value }))}
+            />
+          </FormItem>
+          <FormItem label="MCP 文档" hint="mcpDoc">
+            <div className="flex items-center gap-2">
+              <Input
+                value={manifestForm.mcpDoc}
+                onChange={(e) => setManifestForm((prev) => ({ ...prev, mcpDoc: e.target.value }))}
+                placeholder="相对目录文档路径"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="shrink-0 px-2"
+                title="在资源管理器中打开 MCP 文档（不存在则打开脚本目录）"
+                onClick={() => void handleOpenScriptPath(manifestForm.mcpDoc)}
+              >
+                <FolderOpen className="w-4 h-4" />
+              </Button>
+            </div>
+          </FormItem>
+          <FormItem label="标签" hint="tags，逗号分隔" className="md:col-span-2">
+            <Input
+              value={manifestForm.tags}
+              onChange={(e) => setManifestForm((prev) => ({ ...prev, tags: e.target.value }))}
+              placeholder="例如 tiktok,compass,ai"
+            />
+          </FormItem>
+          <FormItem label="脚本描述" hint="description" required className="md:col-span-2">
+            <Textarea
+              rows={3}
+              value={manifestForm.description}
+              onChange={(e) => setManifestForm((prev) => ({ ...prev, description: e.target.value }))}
+            />
+          </FormItem>
+          <FormItem label="参数说明" hint="argsHint" className="md:col-span-2">
+            <Textarea
+              rows={3}
+              value={manifestForm.argsHint}
+              onChange={(e) => setManifestForm((prev) => ({ ...prev, argsHint: e.target.value }))}
+            />
+          </FormItem>
+          <FormItem label="默认参数" hint="defaultArgs，每行一个参数" className="md:col-span-2">
+            <Textarea
+              rows={4}
+              className="font-mono text-xs"
+              value={manifestForm.defaultArgs}
+              onChange={(e) => setManifestForm((prev) => ({ ...prev, defaultArgs: e.target.value }))}
+              placeholder={'--useLaunchApi\n--code\nYOUR_CODE'}
+            />
+          </FormItem>
+          <FormItem label="依赖 Launch 服务" hint="requiresLaunchServer" className="md:col-span-2">
+            <div className="h-9 flex items-center">
+              <Switch
+                checked={manifestForm.requiresLaunchServer}
+                onChange={(checked) =>
+                  setManifestForm((prev) => ({ ...prev, requiresLaunchServer: checked }))
+                }
+              />
+            </div>
+          </FormItem>
+        </div>
+      </Modal>
     </div>
   )
 }

@@ -27,6 +27,7 @@
     "https-proxy-agent": "^7.0.6",
     "js-yaml": "^4.1.1",
     "lucide-react": "^0.292.0",
+    "playwright": "^1.59.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
@@ -54,7 +55,6 @@
     "electron": "^34.5.8",
     "electron-builder": "^26.8.1",
     "electron-vite": "^3.1.0",
-    "playwright": "^1.59.1",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
@@ -83,6 +83,20 @@
       {
         "from": "playwright_scripts",
         "to": "playwright_scripts",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "node_modules/playwright",
+        "to": "node_modules/playwright",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "node_modules/playwright-core",
+        "to": "node_modules/playwright-core",
         "filter": [
           "**/*"
         ]

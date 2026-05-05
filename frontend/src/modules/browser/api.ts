@@ -499,6 +499,36 @@ export async function openCorePath(corePath: string): Promise<boolean> {
   return false
 }
 
+export async function openPlaywrightScriptPath(folderId: string, relativePath?: string): Promise<boolean> {
+  const folder = String(folderId || '').trim()
+  if (!folder) return false
+  const rel = String(relativePath || '').trim()
+  const target = rel
+    ? `playwright_scripts/${folder}/${rel}`
+    : `playwright_scripts/${folder}`
+
+  const bindings: any = await getBindings()
+  if (bindings?.OpenPlaywrightScriptPath) {
+    await bindings.OpenPlaywrightScriptPath(folder, rel)
+    return true
+  }
+  const goApp = (window as any).go?.main?.App
+  if (goApp?.OpenPlaywrightScriptPath) {
+    await goApp.OpenPlaywrightScriptPath(folder, rel)
+    return true
+  }
+  // 兼容旧绑定：回退到现有 OpenCorePath（支持相对项目根目录路径）
+  if (bindings?.OpenCorePath) {
+    await bindings.OpenCorePath(target)
+    return true
+  }
+  if (goApp?.OpenCorePath) {
+    await goApp.OpenCorePath(target)
+    return true
+  }
+  return false
+}
+
 // ============================================================================
 // Cookie API
 // ============================================================================
@@ -724,6 +754,20 @@ export interface PlaywrightScriptMeta {
   mcpDoc?: string
 }
 
+export interface PlaywrightScriptManifestInput {
+  name: string
+  description: string
+  entry: string
+  id?: string
+  order?: number
+  tags?: string[]
+  version?: string
+  defaultArgs?: string[]
+  argsHint?: string
+  requiresLaunchServer?: boolean
+  mcpDoc?: string
+}
+
 export interface PlaywrightScriptsListPayload {
   rootDir: string
   scripts: PlaywrightScriptMeta[]
@@ -778,6 +822,21 @@ export async function killPlaywrightScriptRunApi(runId: string): Promise<boolean
     return !!(await goApp.KillPlaywrightScriptRun(runId))
   }
   return false
+}
+
+export async function savePlaywrightScriptManifestApi(
+  folderId: string,
+  manifest: PlaywrightScriptManifestInput,
+): Promise<PlaywrightScriptMeta> {
+  const bindings: any = await getBindings()
+  if (bindings?.SavePlaywrightScriptManifest) {
+    return (await bindings.SavePlaywrightScriptManifest(folderId, manifest)) as PlaywrightScriptMeta
+  }
+  const goApp = (window as any).go?.main?.App
+  if (goApp?.SavePlaywrightScriptManifest) {
+    return (await goApp.SavePlaywrightScriptManifest(folderId, manifest)) as PlaywrightScriptMeta
+  }
+  throw new Error('SavePlaywrightScriptManifest 不可用')
 }
 
 export async function getBrowserProfileCode(profileId: string): Promise<string> {

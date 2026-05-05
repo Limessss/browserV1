@@ -37,3 +37,26 @@ export async function openCorePathInExplorer(corePath: string): Promise<void> {
     throw new Error(errMsg)
   }
 }
+
+export async function openPlaywrightScriptPathInExplorer(
+  folderId: string,
+  relativePath?: string,
+): Promise<void> {
+  const fid = folderId.trim()
+  if (!fid || fid.includes('..') || fid.includes('/') || fid.includes('\\')) {
+    throw new Error('脚本目录 id 无效')
+  }
+  const rootDir = resolveAppRelativePath('playwright_scripts')
+  const folderDir = resolve(rootDir, fid)
+  if (!existsSync(folderDir)) {
+    throw new Error(`脚本目录不存在: ${folderDir}`)
+  }
+
+  const rel = String(relativePath ?? '').trim()
+  const targetPath = rel ? resolve(folderDir, rel) : folderDir
+  const openPath = existsSync(targetPath) ? targetPath : folderDir
+  const errMsg = await shell.openPath(openPath)
+  if (errMsg) {
+    throw new Error(errMsg)
+  }
+}
