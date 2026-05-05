@@ -1,9 +1,10 @@
 {
-  "name": "ant-browser-desktop",
+  "name": "nexbrowser-desktop",
   "private": true,
   "version": "0.1.0",
+  "author": "NexBrowser",
   "type": "module",
-  "description": "Ant Browser — Electron + React + Node（从 Wails/Go 迁移）。目录对齐原 Ant-Browser 仓库结构。",
+  "description": "NexBrowser — Electron + React + Node（从 Wails/Go 迁移）。目录对齐原 Ant-Browser 仓库结构。",
   "main": "dist-electron/main/index.js",
   "scripts": {
     "postinstall": "node node_modules/electron/install.js",
@@ -11,7 +12,10 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "lint": "tsc --noEmit -p backend/tsconfig.json && tsc --noEmit -p frontend/tsconfig.json",
-    "smoke:runtime": "node scripts/smoke-runtime-check.mjs"
+    "smoke:runtime": "node scripts/smoke-runtime-check.mjs",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:win:installer": "npm run build && electron-builder --win --x64 -c.win.target=nsis"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",
@@ -48,6 +52,7 @@
     "@vitejs/plugin-react-swc": "^4.3.0",
     "autoprefixer": "^10.4.21",
     "electron": "^34.5.8",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^3.1.0",
     "playwright": "^1.59.1",
     "postcss": "^8.5.3",
@@ -57,5 +62,55 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "build": {
+    "appId": "com.nexbrowser.desktop",
+    "productName": "NexBrowser",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node",
+      "**/*.wasm"
+    ],
+    "extraFiles": [
+      {
+        "from": "playwright_scripts",
+        "to": "playwright_scripts",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false
+    }
   }
 }

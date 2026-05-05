@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { Save, RotateCcw, Upload, Download } from 'lucide-react'
 import { Card, Button, FormItem, Input, Select, Switch, ThemeSwitcher, toast, Modal, Progress } from '../../shared/components'
-import { fetchSettings, saveSettings, resetSettings, initializeSystemData, exportSystemConfig, importSystemConfig } from './api'
+import {
+  fetchSettings,
+  saveSettings,
+  resetSettings,
+  initializeSystemData,
+  exportSystemConfig,
+  importSystemConfig,
+  fetchLinkeooErpConfig,
+  saveLinkeooErpConfig,
+} from './api'
 import type { AppSettings } from './types'
 import { defaultSettings } from './types'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
@@ -30,6 +39,11 @@ export function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
+  const [linkeooErp, setLinkeooErp] = useState({
+    baseUrl: 'https://api.linkeoo.com',
+    apiKeyDraft: '',
+  })
+  const [linkeooErpKeyConfigured, setLinkeooErpKeyConfigured] = useState(false)
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState<'none' | 'init' | 'export' | 'import-reset' | 'import-merge'>('none')
   const [exportProgress, setExportProgress] = useState<BackupExportProgress | null>(null)
@@ -162,6 +176,16 @@ export function SettingsPage() {
     try {
       const data = await fetchSettings()
       setSettings(data)
+      try {
+        const erp = await fetchLinkeooErpConfig()
+        setLinkeooErp({
+          baseUrl: erp.baseUrl || 'https://api.linkeoo.com',
+          apiKeyDraft: '',
+        })
+        setLinkeooErpKeyConfigured(Boolean(erp.apiKey?.trim()))
+      } catch {
+        /* 无后端绑定或非 Electron */
+      }
     } finally {
       setLoading(false)
     }
@@ -177,8 +201,23 @@ export function SettingsPage() {
     try {
       const success = await saveSettings(settings)
       if (success) {
+        const erpPayload: { baseUrl: string; apiKey?: string } = {
+          baseUrl: linkeooErp.baseUrl.trim() || 'https://api.linkeoo.com',
+        }
+        if (linkeooErp.apiKeyDraft.trim()) {
+          erpPayload.apiKey = linkeooErp.apiKeyDraft.trim()
+        }
+        const erpSaved = await saveLinkeooErpConfig(erpPayload)
+        if (linkeooErp.apiKeyDraft.trim()) {
+          setLinkeooErp((p) => ({ ...p, apiKeyDraft: '' }))
+          setLinkeooErpKeyConfigured(true)
+        }
         setHasChanges(false)
-        toast.success('设置已保存')
+        if (erpSaved) {
+          toast.success('设置已保存')
+        } else {
+          toast.success('本地设置已保存（链氪 ERP 需本机主进程，未写入 config.yaml）')
+        }
       }
     } catch (error: any) {
       toast.error(error?.message || '保存失败，请检查配置')
@@ -361,6 +400,44 @@ export function SettingsPage() {
               value={settings.appDescription}
               onChange={e => handleChange('appDescription', e.target.value)}
               placeholder="请输入应用描述"
+            />
+          </FormItem>
+        </div>
+      </Card>
+
+      {/* 第三方接口：链氪 ERP */}
+      <Card
+        title="第三方接口配置"
+        subtitle="链氪 ERP 接口（OpenAPI）— 保存至本机 config.yaml，Playwright 自动化脚本可通过 Launch 服务 GET /api/integrations/linkeoo-erp 读取；环境变量 ERP_API_KEY 优先于本配置"
+      >
+        <div className="space-y-4 max-w-2xl">
+          <FormItem label="API Host" required>
+            <Input
+              value={linkeooErp.baseUrl}
+              onChange={e => {
+                setLinkeooErp(p => ({ ...p, baseUrl: e.target.value }))
+                setHasChanges(true)
+              }}
+              placeholder="https://api.linkeoo.com"
+            />
+          </FormItem>
+          <FormItem
+            label="API Key"
+            hint={
+              linkeooErpKeyConfigured
+                ? '已保存过密钥。留空并保存则保留原密钥；仅当需要更换时输入新 Key。'
+                : 'X-Api-Key，与链氪后台发放的一致。'
+            }
+          >
+            <Input
+              type="password"
+              value={linkeooErp.apiKeyDraft}
+              onChange={e => {
+                setLinkeooErp(p => ({ ...p, apiKeyDraft: e.target.value }))
+                setHasChanges(true)
+              }}
+              placeholder={linkeooErpKeyConfigured ? '留空表示不修改已保存的 Key' : 'erp_sk_...'}
+              autoComplete="off"
             />
           </FormItem>
         </div>

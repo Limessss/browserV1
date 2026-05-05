@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import type { ComponentType } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from './shared/theme'
 import { Layout } from './shared/layout'
 import { ToastContainer, Modal, Button, Loading } from './shared/components'
@@ -38,6 +38,10 @@ const BookmarkSettingsPage = lazyNamed(() => import('./modules/browser/pages/Boo
 const LaunchApiDocsPage = lazyNamed(() => import('./modules/browser/pages/LaunchApiDocsPage'), 'LaunchApiDocsPage')
 const TagManagementPage = lazyNamed(() => import('./modules/browser/pages/TagManagementPage'), 'TagManagementPage')
 const AutomationPage = lazyNamed(() => import('./modules/browser/pages/AutomationPage'), 'AutomationPage')
+const PlaywrightScriptsPage = lazyNamed(
+  () => import('./modules/browser/pages/PlaywrightScriptsPage'),
+  'PlaywrightScriptsPage',
+)
 const UsageTutorialPage = lazyNamed(() => import('./modules/browser/pages/UsageTutorialPage'), 'UsageTutorialPage')
 const QuickLaunchModal = lazyNamed(() => import('./modules/browser/components/QuickLaunchModal'), 'QuickLaunchModal')
 
@@ -110,6 +114,9 @@ function CloseConfirmModal() {
       setQuittingAction(null)
       setOpen(true)
     })
+    if (typeof runtime.NotifyCloseGuardReady === 'function') {
+      runtime.NotifyCloseGuardReady()
+    }
     return () => {
       if (typeof off === 'function') off()
     }
@@ -275,6 +282,7 @@ function App() {
               <Route path="/browser/proxy-pool" element={<ProxyPoolPage />} />
               <Route path="/browser/cores" element={<CoreManagementPage />} />
               <Route path="/browser/bookmarks" element={<BookmarkSettingsPage />} />
+              <Route path="/browser/automation/scripts" element={<PlaywrightScriptsPage />} />
               <Route path="/browser/automation" element={<AutomationPage />} />
               <Route path="/browser/launch-api" element={<LaunchApiDocsPage />} />
               <Route path="/browser/tags" element={<TagManagementPage />} />

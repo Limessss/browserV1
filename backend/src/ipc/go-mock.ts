@@ -37,7 +37,10 @@ export async function invokeGoMock(method: string, _args: unknown[]): Promise<un
       throw new Error('数据库未就绪')
     case 'GetBrowserSettings':
       return defaultBrowserSettings()
+    case 'GetLinkeooErpConfig':
+      return { baseUrl: 'https://api.linkeoo.com', apiKey: '' }
     case 'SaveBrowserSettings':
+    case 'SaveLinkeooErpConfig':
       return undefined
     case 'GetDashboardStats':
       return defaultDashboardStats()
@@ -45,6 +48,16 @@ export async function invokeGoMock(method: string, _args: unknown[]): Promise<un
       return defaultLicenseStatus()
     case 'GetLaunchServerInfo':
       return defaultLauncherInfo()
+    case 'ListPlaywrightScripts':
+      return {
+        rootDir: '',
+        scripts: [] as unknown[],
+        warnings: ['数据库未就绪：Playwright 脚本列表不可用'],
+      }
+    case 'RunPlaywrightScript':
+      throw new Error('数据库未就绪：无法运行脚本')
+    case 'KillPlaywrightScriptRun':
+      return false
     case 'GetAppConfig':
       return {}
     case 'GetInterceptor':

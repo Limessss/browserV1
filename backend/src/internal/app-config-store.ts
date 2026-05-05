@@ -36,7 +36,7 @@ export function defaultBrowserSettings(): Record<string, unknown> {
 function defaultRootYaml(): Record<string, unknown> {
   return {
     app: {
-      name: 'Ant Browser',
+      name: 'NexBrowser',
       max_profile_limit: 20,
       used_cd_keys: [],
     },
@@ -81,6 +81,12 @@ function defaultRootYaml(): Record<string, unknown> {
     launch_server: {
       port: DEFAULT_LAUNCH_PORT,
       auth: { enabled: false, api_key: '', header: DEFAULT_LAUNCH_API_HEADER },
+    },
+    integrations: {
+      linkeoo_erp: {
+        base_url: 'https://api.linkeoo.com',
+        api_key: '',
+      },
     },
   }
 }
@@ -138,6 +144,15 @@ function normalizeRootYaml(raw: Record<string, unknown>): Record<string, unknown
     ensureObject(launchServer.auth).header = DEFAULT_LAUNCH_API_HEADER
   }
   out.launch_server = launchServer
+
+  const defInt = ensureObject(def.integrations)
+  const integ = { ...defInt, ...ensureObject(out.integrations) }
+  const defLe = ensureObject(defInt.linkeoo_erp as Record<string, unknown>)
+  integ.linkeoo_erp = {
+    ...defLe,
+    ...ensureObject(integ.linkeoo_erp as Record<string, unknown>),
+  }
+  out.integrations = integ
   return out
 }
 
@@ -307,6 +322,45 @@ export function loadLaunchServerConfig(): {
 }
 
 /** 兼容旧 IPC：仅 preferredPort + listenUrl */
+export type LinkeooErpConfig = {
+  baseUrl: string
+  apiKey: string
+}
+
+/** 链氪 ERP（OpenAPI）基址与 ApiKey，存于 config.yaml → integrations.linkeoo_erp */
+export function loadLinkeooErpConfig(): LinkeooErpConfig {
+  const raw = readRootYaml()
+  const integ = (raw.integrations as Record<string, unknown>) ?? {}
+  const le = (integ.linkeoo_erp as Record<string, unknown>) ?? {}
+  const base = String(le.base_url ?? 'https://api.linkeoo.com').trim() || 'https://api.linkeoo.com'
+  return {
+    baseUrl: base.replace(/\/$/, ''),
+    apiKey: String(le.api_key ?? '').trim(),
+  }
+}
+
+/**
+ * 保存链氪 ERP 配置。`apiKey` 若未传或为空字符串，则保留文件中的原 api_key（便于「仅改 host、不重复填 key」）。
+ */
+export function saveLinkeooErpConfig(input: { baseUrl?: string; apiKey?: string }): void {
+  if (!configPath) {
+    throw new Error('应用配置尚未初始化')
+  }
+  const raw = readRootYaml()
+  const integ = { ...ensureObject(raw.integrations as Record<string, unknown>) }
+  const prev = ensureObject(integ.linkeoo_erp as Record<string, unknown>)
+  const nextBase = String(input.baseUrl ?? prev.base_url ?? 'https://api.linkeoo.com').trim() || 'https://api.linkeoo.com'
+  const keyIn = input.apiKey
+  const nextKey =
+    typeof keyIn === 'string' && keyIn.trim() !== '' ? keyIn.trim() : String(prev.api_key ?? '').trim()
+  integ.linkeoo_erp = {
+    base_url: nextBase.replace(/\/$/, ''),
+    api_key: nextKey,
+  }
+  raw.integrations = integ
+  saveRootYamlRaw(raw)
+}
+
 export function loadLaunchServerInfo(): Record<string, unknown> {
   const cfg = loadLaunchServerConfig()
   const { auth, preferredPort: port } = cfg

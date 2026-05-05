@@ -1,6 +1,6 @@
-# Ant Browser Desktop（Electron）
+# NexBrowser Desktop（Electron）
 
-位于 `browserV1/ant-browser-desktop`，技术栈为 **Electron + React + Node**。目录对齐上游 Ant-Browser：`backend/`、`frontend/`、`scripts/`、`publish/`、`tools/`、`bin/`。
+位于 `browserV1` 仓库根目录，技术栈为 **Electron + React + Node**。目录对齐上游 Ant-Browser：`backend/`、`frontend/`、`scripts/`、`publish/`、`tools/`、`bin/`。
 
 ## 当前进度（迁移）
 
@@ -18,7 +18,7 @@
 ## 安装与启动
 
 ```bash
-cd ant-browser-desktop
+cd browserV1
 npm install
 npm run dev
 ```

@@ -335,7 +335,7 @@ export function buildManifest(
   appVersion: string,
   createdAt: Date,
 ): BackupManifest {
-  const name = appName.trim() || 'Ant Browser'
+  const name = appName.trim() || 'NexBrowser'
   const version = appVersion.trim() || 'unknown'
   const entries: ManifestEntry[] = scope.entries.map((item) => ({
     id: item.id,

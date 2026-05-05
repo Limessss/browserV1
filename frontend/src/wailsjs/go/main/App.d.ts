@@ -137,6 +137,8 @@ export function GetInterceptor():Promise<logger.MethodInterceptor>;
 
 export function GetLaunchServerInfo():Promise<Record<string, any>>;
 
+export function GetLinkeooErpConfig():Promise<Record<string, any>>;
+
 export function GetLicenseStatus():Promise<backend.LicenseStatus>;
 
 export function GetLogLevel():Promise<string>;
@@ -145,7 +147,13 @@ export function GetMemoryStats():Promise<Record<string, any>>;
 
 export function GetRunningInstances():Promise<Array<browser.Profile>>;
 
+export function KillPlaywrightScriptRun(arg1:string):Promise<boolean>;
+
 export function ListGroups():Promise<Array<browser.GroupWithCount>>;
+
+export function ListPlaywrightScripts():Promise<Record<string, any>>;
+
+export function RunPlaywrightScript(arg1:string,arg2:Array<string>):Promise<Record<string, any>>;
 
 export function MoveInstancesToGroup(arg1:Array<string>,arg2:string):Promise<void>;
 
@@ -164,6 +172,8 @@ export function ReloadConfig():Promise<void>;
 export function SaveBrowserProxies(arg1:Array<config.BrowserProxy>):Promise<void>;
 
 export function SaveBrowserSettings(arg1:browser.Settings):Promise<void>;
+
+export function SaveLinkeooErpConfig(arg1:Record<string, any>):Promise<void>;
 
 export function SetLogLevel(arg1:string):Promise<void>;
 

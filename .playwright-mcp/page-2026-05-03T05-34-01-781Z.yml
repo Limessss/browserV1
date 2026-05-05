@@ -1,0 +1,181 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - navigation [ref=e4]:
+      - navigation [ref=e7]:
+        - generic [ref=e8]:
+          - generic [ref=e9]:
+            - link [ref=e10] [cursor=pointer]:
+              - /url: /
+            - separator [ref=e11]
+            - generic [ref=e13]: 商家中心
+          - generic [ref=e14]:
+            - button [ref=e16] [cursor=pointer]:
+              - img [ref=e18]
+            - img [ref=e26] [cursor=pointer]
+            - img [ref=e34] [cursor=pointer]
+            - img [ref=e43] [cursor=pointer]
+            - generic [ref=e46] [cursor=pointer]:
+              - generic [ref=e48]: TH
+              - generic [ref=e49]:
+                - generic [ref=e50]: Thailand
+                - generic [ref=e51]: (Varerise)
+                - img [ref=e53]
+    - generic [ref=e55]:
+      - complementary [ref=e56]:
+        - menu [ref=e59]:
+          - generic [ref=e60]:
+            - link "首页" [ref=e62]:
+              - /url: https://seller.tiktokshopglobalselling.com/homepage
+              - menuitem "首页" [ref=e63] [cursor=pointer]:
+                - generic [ref=e65]:
+                  - img [ref=e68]
+                  - generic: 首页
+            - generic [ref=e73] [cursor=pointer]:
+              - img [ref=e76]
+              - generic: 常用
+              - img [ref=e80]
+            - separator [ref=e82]
+            - generic [ref=e85] [cursor=pointer]:
+              - img [ref=e88]
+              - generic: 商品
+            - generic [ref=e93] [cursor=pointer]:
+              - img [ref=e96]
+              - generic: 订单
+            - generic [ref=e101] [cursor=pointer]:
+              - img [ref=e104]
+              - generic: 物流
+            - separator [ref=e107]
+            - generic [ref=e110] [cursor=pointer]:
+              - img [ref=e113]
+              - generic: 广告营销
+            - link "客户" [ref=e117]:
+              - /url: https://seller.tiktokshopglobalselling.com/crm?prev_page_name=home_page_menu
+              - menuitem "客户" [ref=e118] [cursor=pointer]:
+                - generic [ref=e120]:
+                  - img [ref=e123]
+                  - generic: 客户
+            - link "联盟" [ref=e129]:
+              - /url: https://seller.tiktokshopglobalselling.com/affiliate/landing
+              - menuitem "联盟" [ref=e130] [cursor=pointer]:
+                - generic [ref=e132]:
+                  - img [ref=e135]
+                  - generic: 联盟
+            - generic [ref=e140] [cursor=pointer]:
+              - img [ref=e143]
+              - generic: 直播和视频
+            - generic [ref=e147] [cursor=pointer]:
+              - img [ref=e150]
+              - generic: 成长中心
+            - generic [ref=e155] [cursor=pointer]:
+              - img [ref=e158]
+              - generic: 应用和服务商
+            - separator [ref=e161]
+            - generic [ref=e164] [cursor=pointer]:
+              - img [ref=e167]
+              - generic: 数据分析
+            - generic [ref=e172] [cursor=pointer]:
+              - img [ref=e175]
+              - generic: 账号健康
+            - generic [ref=e180] [cursor=pointer]:
+              - img [ref=e183]
+              - generic: 合规中心
+            - generic [ref=e189] [cursor=pointer]:
+              - img [ref=e192]
+              - generic: 财务
+      - main [ref=e197]:
+        - generic [ref=e198]:
+          - generic [ref=e199]:
+            - heading "带货视频" [level=1] [ref=e201]:
+              - paragraph [ref=e202]: 带货视频
+            - button "在 TikTok 上发布" [ref=e206] [cursor=pointer]:
+              - generic [ref=e207]: 在 TikTok 上发布
+              - img [ref=e208]
+          - generic [ref=e211]:
+            - generic [ref=e215]:
+              - tab "获得灵感" [ref=e216] [cursor=pointer]:
+                - generic [ref=e217]: 获得灵感
+              - tab "创作内容" [selected] [ref=e218] [cursor=pointer]:
+                - generic [ref=e219]: 创作内容
+              - tab "内容管理" [ref=e220] [cursor=pointer]:
+                - generic [ref=e221]: 内容管理
+            - tabpanel "创作内容" [ref=e225]:
+              - generic [ref=e227]:
+                - generic [ref=e228]:
+                  - generic [ref=e229]: 工具
+                  - button "AI 视频生成器 使用你的素材创建带货视频。 AI 视频生成器 preview" [ref=e231] [cursor=pointer]:
+                    - generic [ref=e232]:
+                      - img [ref=e237]
+                      - generic [ref=e238]: AI 视频生成器
+                      - generic [ref=e239]: 使用你的素材创建带货视频。
+                    - img "AI 视频生成器 preview" [ref=e241]
+                - generic [ref=e242]:
+                  - heading "资源库" [level=2] [ref=e243]
+                  - generic [ref=e244]:
+                    - generic [ref=e245]:
+                      - generic [ref=e249]:
+                        - tab "视频项目" [selected] [ref=e250] [cursor=pointer]:
+                          - generic [ref=e251]: 视频项目
+                        - tab "全部素材" [ref=e252] [cursor=pointer]:
+                          - generic [ref=e253]: 全部素材
+                        - tab "质检" [ref=e254] [cursor=pointer]:
+                          - generic [ref=e255]: 质检
+                      - tabpanel "视频项目" [ref=e259]:
+                        - generic [ref=e260]:
+                          - generic [ref=e261]:
+                            - generic [ref=e266]:
+                              - tab "全部" [selected] [ref=e267] [cursor=pointer]:
+                                - generic [ref=e269]: 全部
+                              - tab "已完成" [ref=e270] [cursor=pointer]:
+                                - generic [ref=e272]: 已完成
+                              - tab "生成中" [ref=e273] [cursor=pointer]:
+                                - generic [ref=e275]: 生成中
+                              - tab "未完成" [ref=e276] [cursor=pointer]:
+                                - generic [ref=e278]: 未完成
+                            - generic [ref=e279]:
+                              - generic [ref=e281]:
+                                - combobox [ref=e282] [cursor=pointer]:
+                                  - generic [ref=e283]:
+                                    - generic [ref=e284]:
+                                      - textbox: 商品 ID
+                                      - generic [ref=e285]: 商品 ID
+                                    - img [ref=e289]
+                                - generic [ref=e293]:
+                                  - textbox "搜索" [ref=e294]
+                                  - img [ref=e296]
+                              - button "筛选" [ref=e301] [cursor=pointer]:
+                                - img [ref=e302]
+                                - generic [ref=e304]: 筛选
+                          - generic [ref=e306]:
+                            - generic [ref=e310]:
+                              - table [ref=e312]:
+                                - rowgroup [ref=e321]:
+                                  - row "项目 商品名称 状态 发布状态 工具 创建成功 操作" [ref=e322]:
+                                    - columnheader "项目" [ref=e323]:
+                                      - generic [ref=e324]: 项目
+                                    - columnheader "商品名称" [ref=e325]:
+                                      - generic [ref=e326]: 商品名称
+                                    - columnheader "状态" [ref=e327]:
+                                      - generic [ref=e328]: 状态
+                                    - columnheader "发布状态" [ref=e329]:
+                                      - generic [ref=e330]: 发布状态
+                                    - columnheader "工具" [ref=e331]:
+                                      - generic [ref=e332]: 工具
+                                    - columnheader "创建成功" [ref=e333]:
+                                      - generic [ref=e334]: 创建成功
+                                    - columnheader "操作" [ref=e335]:
+                                      - generic [ref=e336]: 操作
+                              - table [ref=e338]:
+                                - rowgroup [ref=e347]:
+                                  - row "未找到任何结果" [ref=e348]:
+                                    - cell "未找到任何结果" [ref=e349]:
+                                      - generic [ref=e351]:
+                                        - img [ref=e352]
+                                        - paragraph [ref=e353]: 未找到任何结果
+                            - img [ref=e358]
+                    - generic [ref=e360] [cursor=pointer]:
+                      - img [ref=e361]
+                      - generic [ref=e363]: 查看旧版资源库
+                      - img [ref=e364]
+  - generic [ref=e373] [cursor=pointer]:
+    - img [ref=e374]
+    - generic [ref=e379]: 联系客户经理

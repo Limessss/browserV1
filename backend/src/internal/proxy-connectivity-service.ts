@@ -172,7 +172,7 @@ async function requestJson(urlStr: string, proxyUrl: string | null): Promise<Rec
             port: u.port || (isHttps ? 443 : 80),
             path: `${u.pathname}${u.search}`,
             method: 'GET',
-            headers: { Accept: 'application/json', 'User-Agent': 'Ant-Browser-Desktop/1.0' },
+            headers: { Accept: 'application/json', 'User-Agent': 'NexBrowser-Desktop/1.0' },
             agent,
           },
           (res) => {
@@ -240,7 +240,7 @@ async function requestStatus(urlStr: string, proxyUrl: string | null): Promise<n
             port: u.port || (isHttps ? 443 : 80),
             path: `${u.pathname}${u.search}`,
             method: 'GET',
-            headers: { 'User-Agent': 'Ant-Browser-Desktop/1.0' },
+            headers: { 'User-Agent': 'NexBrowser-Desktop/1.0' },
             agent,
           },
           (res) => {

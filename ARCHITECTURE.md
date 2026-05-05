@@ -1,8 +1,8 @@
-# 架构说明（与 Ant-Browser 对照）
+# 架构说明（NexBrowser，与 Ant-Browser 对照）
 
-本目录为 **Electron + React + Node** 迁移版，命名尽量贴近上游仓库 [Ant-Browser](https://github.com/black-ant/Ant-Browser) 的模块边界，便于对照迁移。
+本目录为 **NexBrowser**（Electron + React + Node）迁移版，命名尽量贴近上游仓库 [Ant-Browser](https://github.com/black-ant/Ant-Browser) 的模块边界，便于对照迁移。
 
-| 原 Ant-Browser | 本仓库 ant-browser-desktop |
+| 原 Ant-Browser | 本仓库（nexbrowser-desktop） |
 |----------------|---------------------------|
 | `main.go` + Wails 生命周期 | `backend/src/main/index.ts`（Electron `app` / `BrowserWindow`） |
 | `backend/*.go` App 胶水层 | `backend/src/ipc/` + `backend/src/services/`（逐步补充） |

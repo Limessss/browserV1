@@ -286,7 +286,7 @@ export async function backupExportPackage(): Promise<Record<string, unknown>> {
   const scope = buildBackupScope(root, raw, db)
   const manifest = buildManifest(
     scope,
-    app.getName() || 'Ant Browser',
+    app.getName() || 'NexBrowser',
     app.getVersion() || '0.1.0',
     new Date(),
   )
@@ -855,7 +855,7 @@ function importFileTrees(
 
 function defaultRootYamlForInit(licenseApp?: Record<string, unknown>): Record<string, unknown> {
   const appSection: Record<string, unknown> = {
-    name: 'Ant Browser',
+    name: 'NexBrowser',
     max_profile_limit: 20,
     used_cd_keys: [] as string[],
   }
@@ -1167,14 +1167,14 @@ export function backupGetManifestTemplate(): Record<string, unknown> {
       format: PACKAGE_FORMAT,
       manifestVersion: MANIFEST_VERSION,
       createdAt: new Date().toISOString(),
-      app: { name: 'Ant Browser', version: app.getVersion() },
+      app: { name: 'NexBrowser', version: app.getVersion() },
       entries: [],
     }
   }
   const s = buildBackupScope(root, loadRootYamlRaw(), getSqlite())
   return buildManifest(
     s,
-    app.getName() || 'Ant Browser',
+    app.getName() || 'NexBrowser',
     app.getVersion() || '0.1.0',
     new Date(),
   ) as unknown as Record<string, unknown>

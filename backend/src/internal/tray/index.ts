@@ -59,7 +59,7 @@ export async function initTray(getWindow: () => BrowserWindow | null): Promise<v
   }
 
   tray = new Tray(await resolveTrayIcon())
-  tray.setToolTip(app.name || 'Ant Browser')
+  tray.setToolTip(app.name || 'NexBrowser')
 
   tray.on('click', () => {
     showMainWindow(getWindow)

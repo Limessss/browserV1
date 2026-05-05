@@ -705,6 +705,81 @@ export async function fetchLaunchServerInfo(): Promise<LaunchServerInfo> {
   }
 }
 
+// --- Playwright 脚本目录（playwright_scripts/*/script.json）---
+
+export interface PlaywrightScriptMeta {
+  folderId: string
+  name: string
+  description: string
+  entry: string
+  manifestPath?: string
+  entryPath?: string
+  id?: string
+  order?: number
+  tags?: string[]
+  version?: string
+  defaultArgs?: string[]
+  argsHint?: string
+  requiresLaunchServer?: boolean
+  mcpDoc?: string
+}
+
+export interface PlaywrightScriptsListPayload {
+  rootDir: string
+  scripts: PlaywrightScriptMeta[]
+  warnings: string[]
+}
+
+function normalizePlaywrightList(raw: unknown): PlaywrightScriptsListPayload {
+  const r = raw as Record<string, unknown> | null
+  return {
+    rootDir: String(r?.rootDir ?? ''),
+    scripts: Array.isArray(r?.scripts) ? (r.scripts as PlaywrightScriptMeta[]) : [],
+    warnings: Array.isArray(r?.warnings) ? (r.warnings as string[]) : [],
+  }
+}
+
+export async function fetchPlaywrightScripts(): Promise<PlaywrightScriptsListPayload> {
+  const bindings: any = await getBindings()
+  if (bindings?.ListPlaywrightScripts) {
+    return normalizePlaywrightList(await bindings.ListPlaywrightScripts())
+  }
+  const goApp = (window as any).go?.main?.App
+  if (goApp?.ListPlaywrightScripts) {
+    return normalizePlaywrightList(await goApp.ListPlaywrightScripts())
+  }
+  return { rootDir: '', scripts: [], warnings: ['无法连接主进程：ListPlaywrightScripts 不可用'] }
+}
+
+export async function runPlaywrightScriptApi(
+  folderId: string,
+  extraArgs: string[],
+): Promise<{ runId: string }> {
+  const bindings: any = await getBindings()
+  if (bindings?.RunPlaywrightScript) {
+    const out = await bindings.RunPlaywrightScript(folderId, extraArgs)
+    return { runId: String((out as any)?.runId ?? '') }
+  }
+  const goApp = (window as any).go?.main?.App
+  if (goApp?.RunPlaywrightScript) {
+    const out = await goApp.RunPlaywrightScript(folderId, extraArgs)
+    return { runId: String((out as any)?.runId ?? '') }
+  }
+  throw new Error('RunPlaywrightScript 不可用')
+}
+
+export async function killPlaywrightScriptRunApi(runId: string): Promise<boolean> {
+  const bindings: any = await getBindings()
+  if (bindings?.KillPlaywrightScriptRun) {
+    return !!(await bindings.KillPlaywrightScriptRun(runId))
+  }
+  const goApp = (window as any).go?.main?.App
+  if (goApp?.KillPlaywrightScriptRun) {
+    return !!(await goApp.KillPlaywrightScriptRun(runId))
+  }
+  return false
+}
+
 export async function getBrowserProfileCode(profileId: string): Promise<string> {
   const bindings: any = await getBindings()
   if (bindings?.BrowserProfileGetCode) {

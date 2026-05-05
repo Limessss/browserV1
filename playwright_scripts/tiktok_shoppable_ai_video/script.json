@@ -1,0 +1,13 @@
+{
+  "id": "tiktok_shoppable_ai_video",
+  "name": "TikTok 可购物 AI 视频",
+  "description": "带货视频 material-2-video：AI 视频生成器 → 选品 → 生成视频；支持 shop_region、product_id。详见同目录 mcp_*.md。",
+  "entry": "tiktok_shoppable_ai_video.mjs",
+  "order": 20,
+  "tags": ["playwright", "tiktok", "shop"],
+  "version": "1.2.3",
+  "defaultArgs": ["--useLaunchApi", "--code", "ICHPPH", "--shop_region", "PH"],
+  "argsHint": "LaunchCode 填你的实例码；--product_id：Enter 搜索后先点行、必要时再点 label/radio；详见 mcp 文档。--cdp 见 README。",
+  "requiresLaunchServer": true,
+  "mcpDoc": "mcp_tiktok_shoppable_ai_video.md"
+}

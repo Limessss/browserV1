@@ -1,0 +1,13 @@
+{
+  "id": "tiktok_compass_gmv",
+  "name": "TikTok Compass 当日 GMV",
+  "description": "打开 Compass 数据概览并读取当天 GMV 展示值（与 MCP 步骤对齐）。",
+  "entry": "tiktok_compass_gmv.mjs",
+  "order": 25,
+  "tags": ["playwright", "tiktok", "shop", "compass", "gmv"],
+  "version": "1.0.0",
+  "defaultArgs": ["--useLaunchApi", "--code", "ICHPPH", "--shop_region", "PH"],
+  "argsHint": "将 --code 换成你的 LaunchCode；--shop_region 对应店铺区域（如 PH）。已用 Cursor mcp.json 的 CDP 时可用 --cdp http://127.0.0.1:19876。需已登录卖家中心。",
+  "requiresLaunchServer": true,
+  "mcpDoc": "mcp_tiktok_compass_gmv.md"
+}

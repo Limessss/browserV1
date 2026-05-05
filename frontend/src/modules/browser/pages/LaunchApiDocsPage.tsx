@@ -51,11 +51,12 @@ const DOC_OVERVIEW = `# 自动化接口文档（重构版）
 - 外部统一使用 LaunchServer 固定端口接入 CDP，\`debugPort\` 仅表示内部实际调试端口
 - 当 \`debugReady=false\` 时，表示浏览器窗口已拉起，但 CDP 仍在后台附着；此时 \`runtimeWarning\` 会说明当前限制
 - 保留最近调用日志：\`GET /api/launch/logs\`，其中 \`selector\` 为归一化后的结构
+- 可选：通过 \`GET /api/playwright-scripts\` 列举应用内 \`playwright_scripts\` 目录下的自动化脚本；\`POST /api/playwright-scripts/run\` 一次 HTTP 启动对应 \`node\` 子进程（与「自动化脚本」页相同能力）
 - 可选 API Key 认证：仅保护 \`/api/*\`，不改变 CDP 统一入口的 localhost 访问模型
 
 ## 运行前提
 
-- Ant Browser 应用已启动
+- NexBrowser 应用已启动
 - Launch 服务监听本机（地址见本页顶部）
 - 如启用了 API 认证，请准备好请求头 \`X-Ant-Api-Key: <your-api-key>\`
 - 如果你要用 \`key / keyword / tags\` 选择实例，需要先在实例配置里维护这些字段
@@ -274,12 +275,16 @@ const DOC_API_INDEX = `# 接口总览
 | 能力 | 方法 | 路径 | 用途 |
 |------|------|------|------|
 | 健康检查 | GET | \`/api/health\` | 检查 Launch 服务是否可用 |
+| 链氪 ERP 配置 | GET | \`/api/integrations/linkeoo-erp\` | 供本机脚本读取系统设置中保存的 API Host 与 X-Api-Key（与 \`config.yaml\` 一致） |
 | 实例配置管理 | GET / POST | \`/api/profiles\` | 查询实例列表，或创建包含代理/标签/关键字/分组的实例配置 |
 | 单实例配置管理 | GET / PUT / DELETE | \`/api/profiles/{profileId}\` | 查询、更新、删除指定实例配置 |
 | 按 Code 启动 | GET | \`/api/launch/{code}\` | 兼容旧版、最快捷的唤起方式 |
 | 选择器启动 | POST | \`/api/launch\` | 支持 code / profileId / 名称 / 关键字 / 标签 / 分组 |
 | CDP 统一入口 | GET / WS | \`/json/version\`、\`/json/list\`、\`/devtools/...\` | 将非 \`/api\` 请求代理到当前活动实例 |
 | 调用记录 | GET | \`/api/launch/logs?limit=50\` | 查看最近接口调用与错误 |
+| 自动化脚本列表 | GET | \`/api/playwright-scripts\` | 列出 \`playwright_scripts/*/script.json\` 元信息（无绝对路径） |
+| 运行自动化脚本 | POST | \`/api/playwright-scripts/run\` | 启动与 UI「自动化脚本」等价的 \`node\` 任务，返回 \`runId\` |
+| 终止脚本任务 | DELETE | \`/api/playwright-scripts/run/{runId}\` | 向子进程发送终止（已结束则 404） |
 
 说明：
 
@@ -896,6 +901,70 @@ curl http://127.0.0.1:19876/api/launch/logs?limit=20
 \`\`\`
 `
 
+const DOC_API_PLAYWRIGHT = `# 接口：自动化脚本（与「自动化脚本」页同源）
+
+与 \`/api/launch\` 不同：本组接口用于在应用内 **spawn \`node\` 执行 \`playwright_scripts\` 下已声明的入口脚本**（\`script.json\` + \`entry\`），行为与主进程 \`RunPlaywrightScript\` 一致。标准输出与退出码通过 Wails 事件推送到 UI，**不**经 HTTP 回传长日志；适合「一条 HTTP 启任务 + 在应用里看日志」的编排。
+
+## 列举脚本
+
+\`\`\`
+GET /api/playwright-scripts
+\`\`\`
+
+\`\`\`bash
+curl http://127.0.0.1:19876/api/playwright-scripts
+\`\`\`
+
+## 运行脚本
+
+\`\`\`
+POST /api/playwright-scripts/run
+\`\`\`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| \`folderId\` / \`id\` | string | 二选一必填 | 子目录名，如 \`tiktok_shoppable_ai_video\` |
+| \`extraArgs\` | string[] | 否 | 附加在 \`script.json\` 的 \`defaultArgs\` 之后 |
+
+\`\`\`bash
+curl -X POST http://127.0.0.1:19876/api/playwright-scripts/run \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "folderId": "tiktok_shoppable_ai_video",
+    "extraArgs": ["--product_id", "1734830576319366836"]
+  }'
+\`\`\`
+
+成功响应（\`200\`）：
+
+\`\`\`json
+{
+  "ok": true,
+  "runId": "550e8400-e29b-41d4-a716-446655440000",
+  "folderId": "tiktok_shoppable_ai_video"
+}
+\`\`\`
+
+错误：\`400\`（参数非法）、\`404\`（未找到 \`folderId\` 对应脚本）、\`500\`（启动失败）。
+
+## 终止任务
+
+\`\`\`
+DELETE /api/playwright-scripts/run/{runId}
+\`\`\`
+
+\`\`\`bash
+curl -X DELETE http://127.0.0.1:19876/api/playwright-scripts/run/550e8400-e29b-41d4-a716-446655440000
+\`\`\`
+
+已结束或未知 \`runId\` 返回 \`404\`。
+
+## 说明
+
+- 若脚本声明 \`requiresLaunchServer: true\`，需保证当前 Launch HTTP 已监听（与 UI 检查一致）；否则脚本进程内调用 \`/api/launch\` 会失败。
+- 认证与其它 \`/api/*\` 相同：启用 Key 时须在请求头携带配置的 API Key。
+`
+
 const DOC_SCENARIOS = `# 场景示例
 
 ## 场景 1：生产环境固定实例
@@ -1267,6 +1336,7 @@ const DOC_TREE: DocNode[] = [
       { id: 'api-launch-post', label: '参数化启动', content: DOC_API_LAUNCH_POST },
       { id: 'api-cdp', label: 'CDP 统一入口', content: DOC_API_CDP },
       { id: 'api-logs', label: '调用记录', content: DOC_API_LOGS },
+      { id: 'api-playwright', label: '自动化脚本', content: DOC_API_PLAYWRIGHT },
     ],
   },
   {

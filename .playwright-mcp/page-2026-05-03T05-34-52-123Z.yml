@@ -1,0 +1,598 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - navigation [ref=e4]:
+        - navigation [ref=e7]:
+          - generic [ref=e8]:
+            - generic [ref=e9]:
+              - link [ref=e10] [cursor=pointer]:
+                - /url: /
+              - separator [ref=e11]
+              - generic [ref=e13]: 商家中心
+            - generic [ref=e14]:
+              - generic [ref=e385] [cursor=pointer]:
+                - img [ref=e388]
+                - generic [ref=e391]:
+                  - text: 限时领至多
+                  - generic [ref=e392]: ฿1K
+              - button [ref=e16] [cursor=pointer]:
+                - img [ref=e18]
+              - img [ref=e26] [cursor=pointer]
+              - separator [ref=e395]
+              - img [ref=e34] [cursor=pointer]
+              - img [ref=e43] [cursor=pointer]
+              - generic [ref=e46] [cursor=pointer]:
+                - generic [ref=e48]: TH
+                - generic [ref=e49]:
+                  - generic [ref=e50]: Thailand
+                  - generic [ref=e51]: (Varerise)
+                  - img [ref=e53]
+      - generic [ref=e55]:
+        - complementary [ref=e56]:
+          - menu [ref=e59]:
+            - generic [ref=e60]:
+              - link "首页" [ref=e62]:
+                - /url: https://seller.tiktokshopglobalselling.com/homepage
+                - menuitem "首页" [ref=e63] [cursor=pointer]:
+                  - generic [ref=e65]:
+                    - img [ref=e68]
+                    - generic: 首页
+              - generic [ref=e73] [cursor=pointer]:
+                - img [ref=e76]
+                - generic: 常用
+                - img [ref=e80]
+              - separator [ref=e82]
+              - generic [ref=e85] [cursor=pointer]:
+                - img [ref=e88]
+                - generic: 商品
+              - generic [ref=e93] [cursor=pointer]:
+                - img [ref=e96]
+                - generic: 订单
+              - generic [ref=e101] [cursor=pointer]:
+                - img [ref=e104]
+                - generic: 物流
+              - separator [ref=e107]
+              - generic [ref=e110] [cursor=pointer]:
+                - img [ref=e113]
+                - generic: 广告营销
+              - link "客户" [ref=e117]:
+                - /url: https://seller.tiktokshopglobalselling.com/crm?prev_page_name=home_page_menu
+                - menuitem "客户" [ref=e118] [cursor=pointer]:
+                  - generic [ref=e120]:
+                    - img [ref=e123]
+                    - generic: 客户
+              - link "联盟" [ref=e129]:
+                - /url: https://seller.tiktokshopglobalselling.com/affiliate/landing
+                - menuitem "联盟" [ref=e130] [cursor=pointer]:
+                  - generic [ref=e132]:
+                    - img [ref=e135]
+                    - generic: 联盟
+              - generic [ref=e140] [cursor=pointer]:
+                - img [ref=e143]
+                - generic: 直播和视频
+              - generic [ref=e147] [cursor=pointer]:
+                - img [ref=e150]
+                - generic: 成长中心
+              - generic [ref=e155] [cursor=pointer]:
+                - img [ref=e158]
+                - generic: 应用和服务商
+              - separator [ref=e161]
+              - generic [ref=e164] [cursor=pointer]:
+                - img [ref=e167]
+                - generic: 数据分析
+              - generic [ref=e172] [cursor=pointer]:
+                - img [ref=e175]
+                - generic: 账号健康
+              - generic [ref=e180] [cursor=pointer]:
+                - img [ref=e183]
+                - generic: 合规中心
+              - generic [ref=e189] [cursor=pointer]:
+                - img [ref=e192]
+                - generic: 财务
+        - main [ref=e197]:
+          - generic [ref=e198]:
+            - generic [ref=e199]:
+              - heading "带货视频" [level=1] [ref=e201]:
+                - paragraph [ref=e202]: 带货视频
+              - button "在 TikTok 上发布" [ref=e206] [cursor=pointer]:
+                - generic [ref=e207]: 在 TikTok 上发布
+                - img [ref=e208]
+            - generic [ref=e211]:
+              - generic [ref=e215]:
+                - tab "获得灵感" [ref=e216] [cursor=pointer]:
+                  - generic [ref=e217]: 获得灵感
+                - tab "创作内容" [selected] [ref=e218] [cursor=pointer]:
+                  - generic [ref=e219]: 创作内容
+                - tab "内容管理" [ref=e220] [cursor=pointer]:
+                  - generic [ref=e221]: 内容管理
+              - tabpanel "创作内容" [ref=e225]:
+                - generic [ref=e227]:
+                  - generic [ref=e228]:
+                    - generic [ref=e229]: 工具
+                    - button "AI 视频生成器 使用你的素材创建带货视频。 AI 视频生成器 preview" [ref=e231] [cursor=pointer]:
+                      - generic [ref=e232]:
+                        - img [ref=e237]
+                        - generic [ref=e238]: AI 视频生成器
+                        - generic [ref=e239]: 使用你的素材创建带货视频。
+                      - img "AI 视频生成器 preview" [ref=e241]
+                  - generic [ref=e242]:
+                    - heading "资源库" [level=2] [ref=e243]
+                    - generic [ref=e244]:
+                      - generic [ref=e245]:
+                        - generic [ref=e249]:
+                          - tab "视频项目" [selected] [ref=e250] [cursor=pointer]:
+                            - generic [ref=e251]: 视频项目
+                          - tab "全部素材" [ref=e252] [cursor=pointer]:
+                            - generic [ref=e253]: 全部素材
+                          - tab "质检" [ref=e254] [cursor=pointer]:
+                            - generic [ref=e255]: 质检
+                        - tabpanel "视频项目" [ref=e259]:
+                          - generic [ref=e260]:
+                            - generic [ref=e261]:
+                              - generic [ref=e266]:
+                                - tab "全部" [selected] [ref=e267] [cursor=pointer]:
+                                  - generic [ref=e269]: 全部
+                                - tab "已完成" [ref=e270] [cursor=pointer]:
+                                  - generic [ref=e272]: 已完成
+                                - tab "生成中" [ref=e273] [cursor=pointer]:
+                                  - generic [ref=e275]: 生成中
+                                - tab "未完成" [ref=e276] [cursor=pointer]:
+                                  - generic [ref=e278]: 未完成
+                              - generic [ref=e279]:
+                                - generic [ref=e281]:
+                                  - combobox [ref=e282] [cursor=pointer]:
+                                    - generic [ref=e283]:
+                                      - generic [ref=e284]:
+                                        - textbox: 商品 ID
+                                        - generic [ref=e285]: 商品 ID
+                                      - img [ref=e289]
+                                  - generic [ref=e293]:
+                                    - textbox "搜索" [ref=e294]
+                                    - img [ref=e296]
+                                - button "筛选" [ref=e301] [cursor=pointer]:
+                                  - img [ref=e302]
+                                  - generic [ref=e304]: 筛选
+                            - generic [ref=e307]:
+                              - generic [ref=e310]:
+                                - table [ref=e312]:
+                                  - rowgroup [ref=e321]:
+                                    - row "项目 商品名称 状态 发布状态 工具 创建成功 操作" [ref=e322]:
+                                      - columnheader "项目" [ref=e323]:
+                                        - generic [ref=e324]: 项目
+                                      - columnheader "商品名称" [ref=e325]:
+                                        - generic [ref=e326]: 商品名称
+                                      - columnheader "状态" [ref=e327]:
+                                        - generic [ref=e328]: 状态
+                                      - columnheader "发布状态" [ref=e329]:
+                                        - generic [ref=e330]: 发布状态
+                                      - columnheader "工具" [ref=e331]:
+                                        - generic [ref=e332]: 工具
+                                      - columnheader "创建成功" [ref=e333]:
+                                        - generic [ref=e334]: 创建成功
+                                      - columnheader "操作" [ref=e335]:
+                                        - generic [ref=e336]: 操作
+                                - table [ref=e338]:
+                                  - rowgroup [ref=e347]:
+                                    - 'row "เสื้อสายเดี่ยวแบบฮัลเตอร์สำหรับผู้หญิง สไตล์สาวเซ็กซี่ เนื้อบางเหมาะกับหน้าร้อน ดีไซน์ไม่สมมาตร เสื้อท่อนบนไม่มีแขน เหมาะใส่เป็นชั้นใน/เสื้อพื้นฐาน ID: 1735396909296158388 已完成 已生成 2 个视频 未发布 0/2 已发布 AI 视频生成器 2026-05-03 00:11:16 查看" [ref=e396]':
+                                      - cell [ref=e397]:
+                                        - generic [ref=e403] [cursor=pointer]:
+                                          - img [ref=e405]
+                                          - img [ref=e408]
+                                      - 'cell "เสื้อสายเดี่ยวแบบฮัลเตอร์สำหรับผู้หญิง สไตล์สาวเซ็กซี่ เนื้อบางเหมาะกับหน้าร้อน ดีไซน์ไม่สมมาตร เสื้อท่อนบนไม่มีแขน เหมาะใส่เป็นชั้นใน/เสื้อพื้นฐาน ID: 1735396909296158388" [ref=e409]':
+                                        - generic [ref=e412]:
+                                          - img [ref=e414]
+                                          - generic [ref=e415]:
+                                            - paragraph [ref=e416]: เสื้อสายเดี่ยวแบบฮัลเตอร์สำหรับผู้หญิง สไตล์สาวเซ็กซี่ เนื้อบางเหมาะกับหน้าร้อน ดีไซน์ไม่สมมาตร เสื้อท่อนบนไม่มีแขน เหมาะใส่เป็นชั้นใน/เสื้อพื้นฐาน
+                                            - paragraph [ref=e417]: "ID: 1735396909296158388"
+                                      - cell "已完成 已生成 2 个视频" [ref=e418]:
+                                        - generic [ref=e421]:
+                                          - generic [ref=e423]: 已完成
+                                          - generic [ref=e425]: 已生成 2 个视频
+                                      - cell "未发布 0/2 已发布" [ref=e426]:
+                                        - generic [ref=e429]:
+                                          - generic [ref=e433]: 未发布
+                                          - generic [ref=e435]: 0/2 已发布
+                                      - cell "AI 视频生成器" [ref=e436]:
+                                        - generic [ref=e439]:
+                                          - img [ref=e441]
+                                          - generic [ref=e442]: AI 视频生成器
+                                      - cell "2026-05-03 00:11:16" [ref=e443]:
+                                        - generic [ref=e446]: 2026-05-03 00:11:16
+                                      - cell "查看" [ref=e447]:
+                                        - button "查看" [ref=e450] [cursor=pointer]:
+                                          - generic [ref=e451]: 查看
+                                    - 'row "เสื้อสายเดี่ยวแบบฮัลเตอร์สำหรับผู้หญิง สไตล์สาวเซ็กซี่ เนื้อบางเหมาะกับหน้าร้อน ดีไซน์ไม่สมมาตร เสื้อท่อนบนไม่มีแขน เหมาะใส่เป็นชั้นใน/เสื้อพื้นฐาน ID: 1735396909296158388 已完成 已生成 2 个视频 未发布 0/2 已发布 AI 视频生成器 2026-05-02 23:33:37 查看" [ref=e452]':
+                                      - cell [ref=e453]:
+                                        - generic [ref=e459] [cursor=pointer]:
+                                          - img [ref=e461]
+                                          - img [ref=e464]
+                                      - 'cell "เสื้อสายเดี่ยวแบบฮัลเตอร์สำหรับผู้หญิง สไตล์สาวเซ็กซี่ เนื้อบางเหมาะกับหน้าร้อน ดีไซน์ไม่สมมาตร เสื้อท่อนบนไม่มีแขน เหมาะใส่เป็นชั้นใน/เสื้อพื้นฐาน ID: 1735396909296158388" [ref=e465]':
+                                        - generic [ref=e468]:
+                                          - img [ref=e470]
+                                          - generic [ref=e471]:
+                                            - paragraph [ref=e472]: เสื้อสายเดี่ยวแบบฮัลเตอร์สำหรับผู้หญิง สไตล์สาวเซ็กซี่ เนื้อบางเหมาะกับหน้าร้อน ดีไซน์ไม่สมมาตร เสื้อท่อนบนไม่มีแขน เหมาะใส่เป็นชั้นใน/เสื้อพื้นฐาน
+                                            - paragraph [ref=e473]: "ID: 1735396909296158388"
+                                      - cell "已完成 已生成 2 个视频" [ref=e474]:
+                                        - generic [ref=e477]:
+                                          - generic [ref=e479]: 已完成
+                                          - generic [ref=e481]: 已生成 2 个视频
+                                      - cell "未发布 0/2 已发布" [ref=e482]:
+                                        - generic [ref=e485]:
+                                          - generic [ref=e489]: 未发布
+                                          - generic [ref=e491]: 0/2 已发布
+                                      - cell "AI 视频生成器" [ref=e492]:
+                                        - generic [ref=e495]:
+                                          - img [ref=e497]
+                                          - generic [ref=e498]: AI 视频生成器
+                                      - cell "2026-05-02 23:33:37" [ref=e499]:
+                                        - generic [ref=e502]: 2026-05-02 23:33:37
+                                      - cell "查看" [ref=e503]:
+                                        - button "查看" [ref=e506] [cursor=pointer]:
+                                          - generic [ref=e507]: 查看
+                                    - 'row "เสื้อยืดแขนยาวปี 2026 สำหรับผู้หญิง สไตล์แม่ เสื้อชั้นพื้นฐาน เสื้อยืดผู้หญิงใหม่ฤดูใบไม้ร่วง ไซส์ใหญ่ เสื้อยืดผู้หญิง ID: 1735372155610367668 已完成 已生成 2 个视频 未发布 0/2 已发布 AI 视频生成器 2026-04-30 17:56:48 查看" [ref=e508]':
+                                      - cell [ref=e509]:
+                                        - generic [ref=e515] [cursor=pointer]:
+                                          - img [ref=e517]
+                                          - img [ref=e520]
+                                      - 'cell "เสื้อยืดแขนยาวปี 2026 สำหรับผู้หญิง สไตล์แม่ เสื้อชั้นพื้นฐาน เสื้อยืดผู้หญิงใหม่ฤดูใบไม้ร่วง ไซส์ใหญ่ เสื้อยืดผู้หญิง ID: 1735372155610367668" [ref=e521]':
+                                        - generic [ref=e524]:
+                                          - img [ref=e526]
+                                          - generic [ref=e527]:
+                                            - paragraph [ref=e528]: เสื้อยืดแขนยาวปี 2026 สำหรับผู้หญิง สไตล์แม่ เสื้อชั้นพื้นฐาน เสื้อยืดผู้หญิงใหม่ฤดูใบไม้ร่วง ไซส์ใหญ่ เสื้อยืดผู้หญิง
+                                            - paragraph [ref=e529]: "ID: 1735372155610367668"
+                                      - cell "已完成 已生成 2 个视频" [ref=e530]:
+                                        - generic [ref=e533]:
+                                          - generic [ref=e535]: 已完成
+                                          - generic [ref=e537]: 已生成 2 个视频
+                                      - cell "未发布 0/2 已发布" [ref=e538]:
+                                        - generic [ref=e541]:
+                                          - generic [ref=e545]: 未发布
+                                          - generic [ref=e547]: 0/2 已发布
+                                      - cell "AI 视频生成器" [ref=e548]:
+                                        - generic [ref=e551]:
+                                          - img [ref=e553]
+                                          - generic [ref=e554]: AI 视频生成器
+                                      - cell "2026-04-30 17:56:48" [ref=e555]:
+                                        - generic [ref=e558]: 2026-04-30 17:56:48
+                                      - cell "查看" [ref=e559]:
+                                        - button "查看" [ref=e562] [cursor=pointer]:
+                                          - generic [ref=e563]: 查看
+                                    - 'row "Pure Sweet Hot Girl เสื้อกั๊กสายเดี่ยวแบบเปิดไหล่สำหรับผู้หญิง ใส่ได้ทั้งเป็นเสื้อชั้นในและใส่เป็นเสื้อนอก ทรงเข้ารูป เสื้อยืดแขนกุดสั้นเซ็กซี่ ID: 1735371965492332212 已完成 已生成 2 个视频 未发布 0/2 已发布 AI 视频生成器 2026-04-30 17:54:52 查看" [ref=e564]':
+                                      - cell [ref=e565]:
+                                        - generic [ref=e571] [cursor=pointer]:
+                                          - img [ref=e573]
+                                          - img [ref=e576]
+                                      - 'cell "Pure Sweet Hot Girl เสื้อกั๊กสายเดี่ยวแบบเปิดไหล่สำหรับผู้หญิง ใส่ได้ทั้งเป็นเสื้อชั้นในและใส่เป็นเสื้อนอก ทรงเข้ารูป เสื้อยืดแขนกุดสั้นเซ็กซี่ ID: 1735371965492332212" [ref=e577]':
+                                        - generic [ref=e580]:
+                                          - img [ref=e582]
+                                          - generic [ref=e583]:
+                                            - paragraph [ref=e584]: Pure Sweet Hot Girl เสื้อกั๊กสายเดี่ยวแบบเปิดไหล่สำหรับผู้หญิง ใส่ได้ทั้งเป็นเสื้อชั้นในและใส่เป็นเสื้อนอก ทรงเข้ารูป เสื้อยืดแขนกุดสั้นเซ็กซี่
+                                            - paragraph [ref=e585]: "ID: 1735371965492332212"
+                                      - cell "已完成 已生成 2 个视频" [ref=e586]:
+                                        - generic [ref=e589]:
+                                          - generic [ref=e591]: 已完成
+                                          - generic [ref=e593]: 已生成 2 个视频
+                                      - cell "未发布 0/2 已发布" [ref=e594]:
+                                        - generic [ref=e597]:
+                                          - generic [ref=e601]: 未发布
+                                          - generic [ref=e603]: 0/2 已发布
+                                      - cell "AI 视频生成器" [ref=e604]:
+                                        - generic [ref=e607]:
+                                          - img [ref=e609]
+                                          - generic [ref=e610]: AI 视频生成器
+                                      - cell "2026-04-30 17:54:52" [ref=e611]:
+                                        - generic [ref=e614]: 2026-04-30 17:54:52
+                                      - cell "查看" [ref=e615]:
+                                        - button "查看" [ref=e618] [cursor=pointer]:
+                                          - generic [ref=e619]: 查看
+                                    - 'row "เสื้อผ้าผู้หญิงสไตล์เกาหลี ไซส์ใหญ่ สำหรับสาวอวบ สีเทาเข้ม คอวี ทรงหลวม เรียบง่าย ชุดเดรสความยาวปานกลาง พร้อมแขนไหล่และกระเป๋า ขนาด L ถึง 4XL ID: 1735372078630340276 已完成 已生成 2 个视频 未发布 0/2 已发布 AI 视频生成器 2026-04-30 17:24:30 查看" [ref=e620]':
+                                      - cell [ref=e621]:
+                                        - generic [ref=e627] [cursor=pointer]:
+                                          - img [ref=e629]
+                                          - img [ref=e632]
+                                      - 'cell "เสื้อผ้าผู้หญิงสไตล์เกาหลี ไซส์ใหญ่ สำหรับสาวอวบ สีเทาเข้ม คอวี ทรงหลวม เรียบง่าย ชุดเดรสความยาวปานกลาง พร้อมแขนไหล่และกระเป๋า ขนาด L ถึง 4XL ID: 1735372078630340276" [ref=e633]':
+                                        - generic [ref=e636]:
+                                          - img [ref=e638]
+                                          - generic [ref=e639]:
+                                            - paragraph [ref=e640]: เสื้อผ้าผู้หญิงสไตล์เกาหลี ไซส์ใหญ่ สำหรับสาวอวบ สีเทาเข้ม คอวี ทรงหลวม เรียบง่าย ชุดเดรสความยาวปานกลาง พร้อมแขนไหล่และกระเป๋า ขนาด L ถึง 4XL
+                                            - paragraph [ref=e641]: "ID: 1735372078630340276"
+                                      - cell "已完成 已生成 2 个视频" [ref=e642]:
+                                        - generic [ref=e645]:
+                                          - generic [ref=e647]: 已完成
+                                          - generic [ref=e649]: 已生成 2 个视频
+                                      - cell "未发布 0/2 已发布" [ref=e650]:
+                                        - generic [ref=e653]:
+                                          - generic [ref=e657]: 未发布
+                                          - generic [ref=e659]: 0/2 已发布
+                                      - cell "AI 视频生成器" [ref=e660]:
+                                        - generic [ref=e663]:
+                                          - img [ref=e665]
+                                          - generic [ref=e666]: AI 视频生成器
+                                      - cell "2026-04-30 17:24:30" [ref=e667]:
+                                        - generic [ref=e670]: 2026-04-30 17:24:30
+                                      - cell "查看" [ref=e671]:
+                                        - button "查看" [ref=e674] [cursor=pointer]:
+                                          - generic [ref=e675]: 查看
+                                    - 'row "ชุดเดรสทูบแบบขนฟู เปิดไหล่ สำหรับผู้หญิง เหมาะสำหรับฤดูใบไม้ผลิ ชุดทางการพร้อมกระโปรง สีดำ กระโปรงเข้ารูปเซ็กซี่ ID: 1735372107150821044 已完成 已生成 2 个视频 未发布 0/2 已发布 AI 视频生成器 2026-04-30 17:14:49 查看" [ref=e676]':
+                                      - cell [ref=e677]:
+                                        - generic [ref=e683] [cursor=pointer]:
+                                          - img [ref=e685]
+                                          - img [ref=e688]
+                                      - 'cell "ชุดเดรสทูบแบบขนฟู เปิดไหล่ สำหรับผู้หญิง เหมาะสำหรับฤดูใบไม้ผลิ ชุดทางการพร้อมกระโปรง สีดำ กระโปรงเข้ารูปเซ็กซี่ ID: 1735372107150821044" [ref=e689]':
+                                        - generic [ref=e692]:
+                                          - img [ref=e694]
+                                          - generic [ref=e695]:
+                                            - paragraph [ref=e696]: ชุดเดรสทูบแบบขนฟู เปิดไหล่ สำหรับผู้หญิง เหมาะสำหรับฤดูใบไม้ผลิ ชุดทางการพร้อมกระโปรง สีดำ กระโปรงเข้ารูปเซ็กซี่
+                                            - paragraph [ref=e697]: "ID: 1735372107150821044"
+                                      - cell "已完成 已生成 2 个视频" [ref=e698]:
+                                        - generic [ref=e701]:
+                                          - generic [ref=e703]: 已完成
+                                          - generic [ref=e705]: 已生成 2 个视频
+                                      - cell "未发布 0/2 已发布" [ref=e706]:
+                                        - generic [ref=e709]:
+                                          - generic [ref=e713]: 未发布
+                                          - generic [ref=e715]: 0/2 已发布
+                                      - cell "AI 视频生成器" [ref=e716]:
+                                        - generic [ref=e719]:
+                                          - img [ref=e721]
+                                          - generic [ref=e722]: AI 视频生成器
+                                      - cell "2026-04-30 17:14:49" [ref=e723]:
+                                        - generic [ref=e726]: 2026-04-30 17:14:49
+                                      - cell "查看" [ref=e727]:
+                                        - button "查看" [ref=e730] [cursor=pointer]:
+                                          - generic [ref=e731]: 查看
+                                    - 'row "เสื้อยืดแขนยาวปี 2026 สำหรับผู้หญิง สไตล์แม่ เสื้อชั้นพื้นฐาน เสื้อยืดผู้หญิงใหม่ฤดูใบไม้ร่วง ไซส์ใหญ่ เสื้อยืดผู้หญิง ID: 1735372155610367668 已完成 已生成 2 个视频 未发布 0/2 已发布 AI 视频生成器 2026-04-30 17:07:38 查看" [ref=e732]':
+                                      - cell [ref=e733]:
+                                        - generic [ref=e739] [cursor=pointer]:
+                                          - img [ref=e741]
+                                          - img [ref=e744]
+                                      - 'cell "เสื้อยืดแขนยาวปี 2026 สำหรับผู้หญิง สไตล์แม่ เสื้อชั้นพื้นฐาน เสื้อยืดผู้หญิงใหม่ฤดูใบไม้ร่วง ไซส์ใหญ่ เสื้อยืดผู้หญิง ID: 1735372155610367668" [ref=e745]':
+                                        - generic [ref=e748]:
+                                          - img [ref=e750]
+                                          - generic [ref=e751]:
+                                            - paragraph [ref=e752]: เสื้อยืดแขนยาวปี 2026 สำหรับผู้หญิง สไตล์แม่ เสื้อชั้นพื้นฐาน เสื้อยืดผู้หญิงใหม่ฤดูใบไม้ร่วง ไซส์ใหญ่ เสื้อยืดผู้หญิง
+                                            - paragraph [ref=e753]: "ID: 1735372155610367668"
+                                      - cell "已完成 已生成 2 个视频" [ref=e754]:
+                                        - generic [ref=e757]:
+                                          - generic [ref=e759]: 已完成
+                                          - generic [ref=e761]: 已生成 2 个视频
+                                      - cell "未发布 0/2 已发布" [ref=e762]:
+                                        - generic [ref=e765]:
+                                          - generic [ref=e769]: 未发布
+                                          - generic [ref=e771]: 0/2 已发布
+                                      - cell "AI 视频生成器" [ref=e772]:
+                                        - generic [ref=e775]:
+                                          - img [ref=e777]
+                                          - generic [ref=e778]: AI 视频生成器
+                                      - cell "2026-04-30 17:07:38" [ref=e779]:
+                                        - generic [ref=e782]: 2026-04-30 17:07:38
+                                      - cell "查看" [ref=e783]:
+                                        - button "查看" [ref=e786] [cursor=pointer]:
+                                          - generic [ref=e787]: 查看
+                                    - 'row "เสื้อสไตล์เกาหลี ความยาวปานกลาง แขนยาว ถัก เนื้อผ้ากันแดด ทรงหลวม แมทช์ง่าย แบบคาร์ดิแกน/เสื้อคลุม ID: 1735336829245556404 已完成 已生成 2 个视频 未发布 0/2 已发布 AI 视频生成器 2026-04-28 11:36:20 查看" [ref=e788]':
+                                      - cell [ref=e789]:
+                                        - generic [ref=e795] [cursor=pointer]:
+                                          - img [ref=e797]
+                                          - img [ref=e800]
+                                      - 'cell "เสื้อสไตล์เกาหลี ความยาวปานกลาง แขนยาว ถัก เนื้อผ้ากันแดด ทรงหลวม แมทช์ง่าย แบบคาร์ดิแกน/เสื้อคลุม ID: 1735336829245556404" [ref=e801]':
+                                        - generic [ref=e804]:
+                                          - img [ref=e806]
+                                          - generic [ref=e807]:
+                                            - paragraph [ref=e808]: เสื้อสไตล์เกาหลี ความยาวปานกลาง แขนยาว ถัก เนื้อผ้ากันแดด ทรงหลวม แมทช์ง่าย แบบคาร์ดิแกน/เสื้อคลุม
+                                            - paragraph [ref=e809]: "ID: 1735336829245556404"
+                                      - cell "已完成 已生成 2 个视频" [ref=e810]:
+                                        - generic [ref=e813]:
+                                          - generic [ref=e815]: 已完成
+                                          - generic [ref=e817]: 已生成 2 个视频
+                                      - cell "未发布 0/2 已发布" [ref=e818]:
+                                        - generic [ref=e821]:
+                                          - generic [ref=e825]: 未发布
+                                          - generic [ref=e827]: 0/2 已发布
+                                      - cell "AI 视频生成器" [ref=e828]:
+                                        - generic [ref=e831]:
+                                          - img [ref=e833]
+                                          - generic [ref=e834]: AI 视频生成器
+                                      - cell "2026-04-28 11:36:20" [ref=e835]:
+                                        - generic [ref=e838]: 2026-04-28 11:36:20
+                                      - cell "查看" [ref=e839]:
+                                        - button "查看" [ref=e842] [cursor=pointer]:
+                                          - generic [ref=e843]: 查看
+                                    - 'row "เสื้อยืดผู้หญิง Plump Girls ขนาดใหญ่พิเศษ (ประมาณ 150 กก.) ลายทาง แขนสั้น เสื้อคอโปโล สไตล์ตะวันตก ทรงหลวม เหมาะสำหรับหน้าร้อน ID: 1735336826157696692 已完成 已生成 2 个视频 未发布 0/2 已发布 AI 视频生成器 2026-04-28 11:36:00 查看" [ref=e844]':
+                                      - cell [ref=e845]:
+                                        - generic [ref=e851] [cursor=pointer]:
+                                          - img [ref=e853]
+                                          - img [ref=e856]
+                                      - 'cell "เสื้อยืดผู้หญิง Plump Girls ขนาดใหญ่พิเศษ (ประมาณ 150 กก.) ลายทาง แขนสั้น เสื้อคอโปโล สไตล์ตะวันตก ทรงหลวม เหมาะสำหรับหน้าร้อน ID: 1735336826157696692" [ref=e857]':
+                                        - generic [ref=e860]:
+                                          - img [ref=e862]
+                                          - generic [ref=e863]:
+                                            - paragraph [ref=e864]: เสื้อยืดผู้หญิง Plump Girls ขนาดใหญ่พิเศษ (ประมาณ 150 กก.) ลายทาง แขนสั้น เสื้อคอโปโล สไตล์ตะวันตก ทรงหลวม เหมาะสำหรับหน้าร้อน
+                                            - paragraph [ref=e865]: "ID: 1735336826157696692"
+                                      - cell "已完成 已生成 2 个视频" [ref=e866]:
+                                        - generic [ref=e869]:
+                                          - generic [ref=e871]: 已完成
+                                          - generic [ref=e873]: 已生成 2 个视频
+                                      - cell "未发布 0/2 已发布" [ref=e874]:
+                                        - generic [ref=e877]:
+                                          - generic [ref=e881]: 未发布
+                                          - generic [ref=e883]: 0/2 已发布
+                                      - cell "AI 视频生成器" [ref=e884]:
+                                        - generic [ref=e887]:
+                                          - img [ref=e889]
+                                          - generic [ref=e890]: AI 视频生成器
+                                      - cell "2026-04-28 11:36:00" [ref=e891]:
+                                        - generic [ref=e894]: 2026-04-28 11:36:00
+                                      - cell "查看" [ref=e895]:
+                                        - button "查看" [ref=e898] [cursor=pointer]:
+                                          - generic [ref=e899]: 查看
+                              - generic [ref=e901]:
+                                - generic [ref=e902]: 总计：9 项
+                                - list [ref=e903]:
+                                  - listitem "上一个" [ref=e904]:
+                                    - img [ref=e905]
+                                    - text: .
+                                  - listitem "第 1 页" [ref=e907] [cursor=pointer]: "1"
+                                  - listitem "下一个" [ref=e908]:
+                                    - img [ref=e909]
+                                    - text: .
+                                - generic "页面大小" [ref=e911]:
+                                  - combobox [ref=e912] [cursor=pointer]:
+                                    - generic "10 /页" [ref=e913]:
+                                      - generic [ref=e914]:
+                                        - textbox: 10 /页
+                                        - generic [ref=e915]: 10 /页
+                                      - img [ref=e918]
+                      - generic [ref=e360] [cursor=pointer]:
+                        - img [ref=e361]
+                        - generic [ref=e363]: 查看旧版资源库
+                        - img [ref=e364]
+    - generic [ref=e373] [cursor=pointer]:
+      - img [ref=e374]
+      - generic [ref=e379]: 联系客户经理
+  - dialog [ref=e920]:
+    - generic [ref=e923]:
+      - generic [ref=e924]:
+        - generic [ref=e925]: AI 视频生成器
+        - img [ref=e927] [cursor=pointer]
+      - generic [ref=e930]:
+        - generic [ref=e931]:
+          - generic [ref=e932]:
+            - generic [ref=e933]: 选择一款商品
+            - generic [ref=e934]: 商品详情和素材将用于生成视频。
+            - generic [ref=e1387]:
+              - generic [ref=e1389]:
+                - img [ref=e1390]
+                - img [ref=e1393] [cursor=pointer]
+              - generic [ref=e1395]:
+                - generic [ref=e1396]: เสื้อยืดผู้หญิงแขนสั้น ผ้าอะซิเตทเหมือน สไตล์ใหม่ฤดูร้อน เสื้อยืดสีขาวคอกลม คุณภาพสูง แมตช์ได้หลากหลาย
+                - generic [ref=e1397]: "ID: 1735407139289204404"
+              - generic [ref=e1398]:
+                - button "编辑" [ref=e1400] [cursor=pointer]:
+                  - generic [ref=e1401]: 编辑
+                - img [ref=e1403] [cursor=pointer]
+          - generic [ref=e940]:
+            - generic [ref=e941]: 上传素材
+            - generic [ref=e943]:
+              - generic [ref=e944]: 你店铺中的素材可能在此显示。为达最佳效果，请上传你商品的实拍视频。
+              - generic [ref=e945]: 从你的店铺中找到的素材可能在此显示，你可自行移除。
+            - button "哪些素材能生成优质的 AI 视频？ 展开了解哪类素材效果最佳。" [ref=e950] [cursor=pointer]:
+              - img [ref=e953]
+              - generic [ref=e956]:
+                - checkbox
+                - generic [ref=e961]:
+                  - img [ref=e963]
+                  - generic [ref=e964]:
+                    - generic [ref=e966]: 哪些素材能生成优质的 AI 视频？
+                    - paragraph [ref=e967]: 展开了解哪类素材效果最佳。
+            - generic [ref=e968]:
+              - generic [ref=e969] [cursor=pointer]:
+                - img [ref=e970]
+                - generic [ref=e972]:
+                  - text: 选择文件
+                  - img [ref=e973]
+                - generic [ref=e976]: 图片：最大 500 MB
+                - generic [ref=e977]: 视频：最长 10 分钟，不超过 500 MB
+              - generic [ref=e978]:
+                - generic [ref=e1407]:
+                  - img [ref=e1408]
+                  - generic [ref=e1409]:
+                    - img [ref=e1411] [cursor=pointer]
+                    - img [ref=e1414] [cursor=pointer]
+                - generic [ref=e1418]:
+                  - img [ref=e1419]
+                  - generic [ref=e1420]:
+                    - img [ref=e1422] [cursor=pointer]
+                    - img [ref=e1425] [cursor=pointer]
+                - generic [ref=e1429]:
+                  - img [ref=e1430]
+                  - generic [ref=e1431]:
+                    - img [ref=e1433] [cursor=pointer]
+                    - img [ref=e1436] [cursor=pointer]
+                - generic [ref=e1440]:
+                  - img [ref=e1441]
+                  - generic [ref=e1442]:
+                    - img [ref=e1444] [cursor=pointer]
+                    - img [ref=e1447] [cursor=pointer]
+                - generic [ref=e1451]:
+                  - img [ref=e1452]
+                  - generic [ref=e1453]:
+                    - img [ref=e1455] [cursor=pointer]
+                    - img [ref=e1458] [cursor=pointer]
+                - generic [ref=e1462]:
+                  - img [ref=e1463]
+                  - generic [ref=e1464]:
+                    - img [ref=e1466] [cursor=pointer]
+                    - img [ref=e1469] [cursor=pointer]
+                - generic [ref=e1473]:
+                  - img [ref=e1474]
+                  - generic [ref=e1475]:
+                    - img [ref=e1477] [cursor=pointer]
+                    - img [ref=e1480] [cursor=pointer]
+                - generic [ref=e1484]:
+                  - img [ref=e1485]
+                  - generic [ref=e1486]:
+                    - img [ref=e1488] [cursor=pointer]
+                    - img [ref=e1491] [cursor=pointer]
+                - generic [ref=e1495]:
+                  - img [ref=e1496]
+                  - generic [ref=e1497]:
+                    - img [ref=e1499] [cursor=pointer]
+                    - img [ref=e1502] [cursor=pointer]
+                - generic [ref=e1506]:
+                  - img [ref=e1507]
+                  - generic [ref=e1508]:
+                    - img [ref=e1510] [cursor=pointer]
+                    - img [ref=e1513] [cursor=pointer]
+          - generic [ref=e989]:
+            - generic [ref=e990]: AI 视频提示词（选填）
+            - generic [ref=e991]: 告诉 AI 如何制作视频。使用提示词按钮快速添加详情。
+            - generic [ref=e993]:
+              - textbox "告诉 AI 视频中需要包含的内容。选择参考视频，或使用提示按钮快速开始。" [ref=e994]
+              - generic [ref=e995]:
+                - button "参考视频（0/2）" [ref=e1516] [cursor=pointer]:
+                  - img [ref=e1517]
+                  - generic [ref=e1520]: 参考视频（0/2）
+                - button "卖点" [ref=e998] [cursor=pointer]:
+                  - img [ref=e999]
+                  - generic [ref=e1001]: 卖点
+                - button "目标观众" [ref=e1002] [cursor=pointer]:
+                  - img [ref=e1003]
+                  - generic [ref=e1005]: 目标观众
+                - button "视频风格" [ref=e1006] [cursor=pointer]:
+                  - img [ref=e1007]
+                  - generic [ref=e1009]: 视频风格
+                - button "价格和促销" [ref=e1010] [cursor=pointer]:
+                  - img [ref=e1011]
+                  - generic [ref=e1013]: 价格和促销
+              - generic [ref=e1014]: 0/2000
+            - generic [ref=e1015]:
+              - button "泰语" [ref=e1016] [cursor=pointer]:
+                - img [ref=e1017]
+                - generic [ref=e1019]: 泰语
+                - img [ref=e1020]
+              - button "15s" [ref=e1022] [cursor=pointer]:
+                - img [ref=e1023]
+                - generic [ref=e1026]: 15s
+                - img [ref=e1027]
+              - button "已自动配音" [ref=e1029] [cursor=pointer]:
+                - img [ref=e1031]
+                - generic [ref=e1032]: 已自动配音
+                - img [ref=e1033]
+              - button "已自动选择音乐" [ref=e1035] [cursor=pointer]:
+                - img [ref=e1037]
+                - generic [ref=e1038]: 已自动选择音乐
+                - img [ref=e1039]
+            - generic [ref=e1042]:
+              - switch [ref=e1044] [cursor=pointer]
+              - generic [ref=e1046]:
+                - text: 审核视频脚本（可选）
+                - img [ref=e1047] [cursor=pointer]
+        - generic [ref=e1050]:
+          - generic [ref=e1052]:
+            - text: 今日剩余
+            - generic [ref=e1053]: 3/5
+            - text: 点 AI 信用额度
+          - button "生成视频 →" [ref=e1521] [cursor=pointer]:
+            - generic [ref=e1522]: 生成视频
+            - generic [ref=e1523]: →
+  - generic: . .

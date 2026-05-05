@@ -93,6 +93,9 @@ export function WindowReload(): void;
 // Reloads the application frontend.
 export function WindowReloadApp(): void;
 
+/** Electron：前端已挂好关窗确认后再通知主进程拦截，避免白屏时无法关闭 */
+export function NotifyCloseGuardReady(): void;
+
 // [WindowSetAlwaysOnTop](https://wails.io/docs/reference/runtime/window#windowsetalwaysontop)
 // Sets the window AlwaysOnTop or not on top.
 export function WindowSetAlwaysOnTop(b: boolean): void;

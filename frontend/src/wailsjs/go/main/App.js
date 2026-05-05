@@ -262,6 +262,10 @@ export function GetLaunchServerInfo() {
   return window['go']['main']['App']['GetLaunchServerInfo']();
 }
 
+export function GetLinkeooErpConfig() {
+  return window['go']['main']['App']['GetLinkeooErpConfig']();
+}
+
 export function GetLicenseStatus() {
   return window['go']['main']['App']['GetLicenseStatus']();
 }
@@ -316,6 +320,10 @@ export function SaveBrowserProxies(arg1) {
 
 export function SaveBrowserSettings(arg1) {
   return window['go']['main']['App']['SaveBrowserSettings'](arg1);
+}
+
+export function SaveLinkeooErpConfig(arg1) {
+  return window['go']['main']['App']['SaveLinkeooErpConfig'](arg1);
 }
 
 export function SetLogLevel(arg1) {

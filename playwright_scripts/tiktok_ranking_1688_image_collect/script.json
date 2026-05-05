@@ -1,0 +1,13 @@
+{
+  "id": "tiktok_ranking_1688_image_collect",
+  "name": "榜单图搜 1688 采集",
+  "description": "从机会「TikTok 榜单商品」拉取待开发列表，随机 3 条，按 cover 图在 1688 图搜进入第二条结果详情并 POST 仓库采集，最后 bulk 标记已开发。需 ERP_API_KEY、已登录/可访问 1688 的浏览器 CDP。",
+  "entry": "tiktok_ranking_1688_image_collect.mjs",
+  "order": 45,
+  "tags": ["playwright", "1688", "opportunity", "warehouse"],
+  "version": "1.0.0",
+  "defaultArgs": ["--useLaunchApi", "--code", "ICHPPH"],
+  "argsHint": "在系统设置「链氪 ERP」配置 Host/Key 后，可用 --useLaunchApi 或 --cdp 从 Launch 拉取；亦可 ERP_API_KEY 或 --erpKey。--detailWaitMs 详情页抓取前等待（默认 3000ms）。--dryRun 不 POST 采集/标记。详见 mcp 文档。",
+  "requiresLaunchServer": true,
+  "mcpDoc": "mcp_tiktok_ranking_1688_image_collect.md"
+}

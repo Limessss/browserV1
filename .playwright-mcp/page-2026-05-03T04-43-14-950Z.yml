@@ -1,0 +1,15 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - heading "Example Domain" [level=1] [ref=e3]
+    - paragraph [ref=e4]: This domain is for use in documentation examples without needing permission. Avoid use in operations.
+    - paragraph [ref=e5]:
+      - link "Learn more" [ref=e6] [cursor=pointer]:
+        - /url: https://iana.org/domains/example
+  - generic [ref=e7]:
+    - generic [ref=e8]: ×
+    - generic [ref=e9]:
+      - generic [ref=e10]:
+        - img [ref=e11]
+        - generic [ref=e13]: 拖拽到此处
+        - generic [ref=e14]: 图片将完成下载
+      - generic [ref=e15]: 由Fitkun图片批量下载提供

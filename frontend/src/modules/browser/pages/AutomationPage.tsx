@@ -102,6 +102,15 @@ function buildSampleLogsRequest(baseUrl: string, apiAuth: LaunchServerInfo['apiA
   -H "${apiAuth.header}: <your-api-key>"`
 }
 
+function buildSamplePlaywrightRunRequest(baseUrl: string, apiAuth: LaunchServerInfo['apiAuth']): string {
+  return `curl -X POST ${baseUrl}/api/playwright-scripts/run \\
+  -H "Content-Type: application/json" \\
+${buildAuthHeaderLine(apiAuth)}  -d '{
+    "folderId": "tiktok_shoppable_ai_video",
+    "extraArgs": ["--product_id", "1734830576319366836"]
+  }'`
+}
+
 function CopyCodeButton({ text }: { text: string }) {
   return (
     <Button
@@ -162,6 +171,7 @@ export function AutomationPage() {
   const sampleCreateAndLaunchRequest = buildSampleCreateAndLaunchRequest(launchBaseUrl, apiAuth)
   const sampleRequest = buildSampleRequest(launchBaseUrl, apiAuth)
   const sampleLogsRequest = buildSampleLogsRequest(launchBaseUrl, apiAuth)
+  const samplePlaywrightRunRequest = buildSamplePlaywrightRunRequest(launchBaseUrl, apiAuth)
   const activeTabMeta = AUTOMATION_TABS.find(tab => tab.key === activeTab) || AUTOMATION_TABS[0]
 
   return (
@@ -340,6 +350,18 @@ export function AutomationPage() {
             actions={<CopyCodeButton text={sampleResponse} />}
           >
             <CodeBlock text={sampleResponse} />
+          </Card>
+
+          <Card
+            title="一条 HTTP 启动自动化脚本"
+            subtitle="POST /api/playwright-scripts/run（与「自动化脚本」页同源）"
+            actions={<CopyCodeButton text={samplePlaywrightRunRequest} />}
+          >
+            <CodeBlock text={samplePlaywrightRunRequest} />
+            <p className="mt-3 text-sm text-[var(--color-text-secondary)]">
+              先 <code>GET /api/playwright-scripts</code> 查看 <code>folderId</code> 与 <code>defaultArgs</code>；<code>extraArgs</code> 会拼在 manifest 默认参数之后。返回 <code>runId</code> 后可用{' '}
+              <code>{'DELETE /api/playwright-scripts/run/{runId}'}</code> 终止。标准输出在应用内「自动化脚本」日志区查看。
+            </p>
           </Card>
         </div>
       )}

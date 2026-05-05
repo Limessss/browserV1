@@ -16,6 +16,7 @@ import {
   listProxyGroups,
 } from '../internal/browser-data'
 import { listBookmarksResolved } from '../internal/bookmark-list-resolve'
+import { browserCoreScanDisk } from '../internal/core-scan'
 import {
   browserCoreDelete,
   browserCoreExtendedInfo,
@@ -46,8 +47,10 @@ import {
 } from '../internal/browser-writes'
 import {
   loadBrowserSettingsMerged,
+  loadLinkeooErpConfig,
   reloadAppConfig,
   saveBrowserSettings,
+  saveLinkeooErpConfig,
 } from '../internal/app-config-store'
 import {
   browserSnapshotCreate,
@@ -99,6 +102,11 @@ import {
   testProxyRealConnectivity,
 } from '../internal/proxy-connectivity-service'
 import { buildGetLaunchServerInfo } from '../internal/launch-http-server'
+import {
+  killPlaywrightScriptRun,
+  listPlaywrightScripts,
+  runPlaywrightScript,
+} from '../internal/playwright-scripts-service'
 import { getSqlite } from '../internal/database/sqlite-store'
 import { openCorePathInExplorer, openUserDataDir } from '../internal/fs-open'
 import { invokeGoMock } from './go-mock'
@@ -128,8 +136,9 @@ function dispatch(db: Database, method: string, args: unknown[]): unknown | null
     case 'ListGroups':
       return listGroupsWithCount(db)
     case 'BrowserCoreList':
-    case 'BrowserCoreScan':
       return listCores(db)
+    case 'BrowserCoreScan':
+      return browserCoreScanDisk(db)
     case 'BrowserCoreExtendedInfo':
       return browserCoreExtendedInfo(db)
     case 'BookmarkList':
@@ -258,6 +267,33 @@ export async function invokeGoCall(method: string, args: unknown[]): Promise<unk
       throw new Error(String(e))
     }
   }
+  if (method === 'GetLinkeooErpConfig') {
+    try {
+      return loadLinkeooErpConfig()
+    } catch (e) {
+      console.error('[go-call]', method, e)
+      if (e instanceof Error) {
+        throw e
+      }
+      throw new Error(String(e))
+    }
+  }
+  if (method === 'SaveLinkeooErpConfig') {
+    try {
+      const o = (args[0] ?? {}) as Record<string, unknown>
+      saveLinkeooErpConfig({
+        baseUrl: typeof o.baseUrl === 'string' ? o.baseUrl : undefined,
+        apiKey: typeof o.apiKey === 'string' ? o.apiKey : undefined,
+      })
+      return undefined
+    } catch (e) {
+      console.error('[go-call]', method, e)
+      if (e instanceof Error) {
+        throw e
+      }
+      throw new Error(String(e))
+    }
+  }
   if (method === 'ReloadConfig') {
     reloadAppConfig()
     return undefined
@@ -270,6 +306,30 @@ export async function invokeGoCall(method: string, args: unknown[]): Promise<unk
   }
   if (method === 'GetLaunchServerInfo') {
     return buildGetLaunchServerInfo()
+  }
+  if (method === 'ListPlaywrightScripts') {
+    try {
+      return await listPlaywrightScripts()
+    } catch (e) {
+      console.error('[go-call]', method, e)
+      throw e instanceof Error ? e : new Error(String(e))
+    }
+  }
+  if (method === 'RunPlaywrightScript') {
+    try {
+      return await runPlaywrightScript(String(args[0] ?? ''), args[1])
+    } catch (e) {
+      console.error('[go-call]', method, e)
+      throw e instanceof Error ? e : new Error(String(e))
+    }
+  }
+  if (method === 'KillPlaywrightScriptRun') {
+    try {
+      return killPlaywrightScriptRun(String(args[0] ?? ''))
+    } catch (e) {
+      console.error('[go-call]', method, e)
+      throw e instanceof Error ? e : new Error(String(e))
+    }
   }
   if (method === 'BackupGetScopeDefinition') {
     return backupGetScopeDefinition()

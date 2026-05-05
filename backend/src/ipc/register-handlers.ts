@@ -5,13 +5,17 @@ import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron'
 import { forceQuitCleanup } from '../internal/force-quit-cleanup'
 import { setQuitMode } from '../internal/quit-mode'
 import { invokeGoCall } from './go-handlers'
-import { setAllowCloseOnce } from './window-close-guard'
+import { setAllowCloseOnce, setCloseDialogReady } from './window-close-guard'
 
 export interface IpcContext {
   getWindow: () => BrowserWindow | null
 }
 
 export function registerIpcHandlers(ctx: IpcContext): void {
+  ipcMain.on('renderer:close-guard-ready', () => {
+    setCloseDialogReady(true)
+  })
+
   ipcMain.handle('go:call', async (_event, method: string, args: unknown[]) => {
     if (typeof method !== 'string') {
       return undefined

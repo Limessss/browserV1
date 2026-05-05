@@ -85,3 +85,31 @@ export async function importSystemConfig(resetFirst: boolean): Promise<BackupAct
   }
   return (await bindings.BackupImportPackage(resetFirst)) || {}
 }
+
+export interface LinkeooErpConfig {
+  baseUrl: string
+  apiKey: string
+}
+
+/** 链氪 ERP（config.yaml），供系统设置与脚本经 Launch HTTP 读取 */
+export async function fetchLinkeooErpConfig(): Promise<LinkeooErpConfig> {
+  const bindings: any = await getBindings()
+  if (!bindings?.GetLinkeooErpConfig) {
+    return { baseUrl: 'https://api.linkeoo.com', apiKey: '' }
+  }
+  const c = (await bindings.GetLinkeooErpConfig()) as Partial<LinkeooErpConfig>
+  return {
+    baseUrl: String(c?.baseUrl ?? 'https://api.linkeoo.com').trim() || 'https://api.linkeoo.com',
+    apiKey: String(c?.apiKey ?? ''),
+  }
+}
+
+/** `apiKey` 不传或空字符串：保留已保存的密钥（仅更新 host） */
+export async function saveLinkeooErpConfig(payload: { baseUrl: string; apiKey?: string }): Promise<boolean> {
+  const bindings: any = await getBindings()
+  if (!bindings?.SaveLinkeooErpConfig) {
+    return false
+  }
+  await bindings.SaveLinkeooErpConfig(payload)
+  return true
+}

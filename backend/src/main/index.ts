@@ -17,6 +17,26 @@ import { destroyTray, initTray } from '../internal/tray'
 
 const isDev = !app.isPackaged
 
+/** 打包版临时调试：启动前设置环境变量 NEXBROWSER_DEVTOOLS=1（或 true/yes）自动打开 Console */
+function shouldOpenPackagedDevTools(): boolean {
+  if (!app.isPackaged) {
+    return false
+  }
+  const v = (process.env.NEXBROWSER_DEVTOOLS ?? '').trim().toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes'
+}
+
+function attachPackagedDevTools(win: BrowserWindow): void {
+  if (!shouldOpenPackagedDevTools()) {
+    return
+  }
+  const open = (): void => {
+    win.webContents.openDevTools({ mode: 'detach' })
+  }
+  win.webContents.once('did-finish-load', open)
+  win.webContents.once('did-fail-load', open)
+}
+
 function resolvePreloadScript(): string {
   const base = join(__dirname, '../preload/index')
   for (const ext of ['.js', '.mjs', '.cjs']) {
@@ -47,6 +67,8 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // 生产态 file:// 加载 Vite 打出的带 crossorigin 的 module 脚本时，需关闭同源限制，否则常见白屏
+      webSecurity: isDev,
     },
   })
 
@@ -58,8 +80,10 @@ function createWindow(): BrowserWindow {
     void win.loadURL(process.env.ELECTRON_RENDERER_URL)
     win.webContents.openDevTools({ mode: 'detach' })
   } else {
-    void win.loadFile(join(__dirname, '../../renderer/index.html'))
+    void win.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  attachPackagedDevTools(win)
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)

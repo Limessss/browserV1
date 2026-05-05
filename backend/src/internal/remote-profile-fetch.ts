@@ -35,7 +35,7 @@ export async function fetchRemoteAuthorProfile(
       signal: ac.signal,
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'AntBrowser/1.0 profile-fetch',
+        'User-Agent': 'NexBrowser/1.0 profile-fetch',
       },
     })
 

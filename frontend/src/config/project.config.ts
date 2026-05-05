@@ -6,8 +6,8 @@
 
 // 项目基础信息
 export const projectConfig = {
-  name: 'Ant Browser',
-  shortName: 'Ant',
+  name: 'NexBrowser',
+  shortName: 'Nex',
   description: '面向多账号隔离、代理绑定和本地环境管理的桌面浏览器工具',
   primaryColor: 'primary',
 }
@@ -35,11 +35,17 @@ export const navigationConfig: NavSection[] = [
     title: '指纹浏览器',
     items: [
       { name: '实例列表', path: '/browser/list', icon: 'Monitor' },
-      { name: '自动化接口（实验）', path: '/browser/automation', icon: 'Bot' },
       { name: '内核管理', path: '/browser/cores', icon: 'Cpu' },
       { name: '代理池配置', path: '/browser/proxy-pool', icon: 'Globe' },
       { name: '默认书签', path: '/browser/bookmarks', icon: 'Bookmark' },
       { name: '标签管理', path: '/browser/tags', icon: 'Tag' },
+    ]
+  },
+  {
+    title: '自动化',
+    items: [
+      { name: '自动化脚本', path: '/browser/automation/scripts', icon: 'Terminal' },
+      { name: '自动化接口（实验）', path: '/browser/automation', icon: 'Bot' },
     ]
   },
   {

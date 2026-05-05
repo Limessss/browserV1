@@ -281,7 +281,7 @@ async function downloadToFile(
         path: `${u.pathname}${u.search}`,
         method: 'GET',
         agent: agent as http.Agent,
-        headers: { 'User-Agent': 'Ant-Browser-Desktop/1.0', Accept: '*/*' },
+        headers: { 'User-Agent': 'NexBrowser-Desktop/1.0', Accept: '*/*' },
       }
 
       const req = lib.request(opts, (res) => {

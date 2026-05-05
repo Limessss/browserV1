@@ -14,7 +14,11 @@ import {
   browserProfileDelete,
   browserProfileUpdate,
 } from './browser-writes'
-import { DEFAULT_LAUNCH_API_HEADER, loadLaunchServerConfig } from './app-config-store'
+import {
+  DEFAULT_LAUNCH_API_HEADER,
+  loadLaunchServerConfig,
+  loadLinkeooErpConfig,
+} from './app-config-store'
 import {
   browserInstanceStart,
   browserInstanceStartByCode as startByCodeWithParams,
@@ -33,6 +37,12 @@ import { getLaunchServerActiveTarget } from './launch-server-state'
 
 import { parseJsonArray, type ProfileRow } from './browser-data'
 import { getSqlite } from './database/sqlite-store'
+import {
+  killPlaywrightScriptRun,
+  listPlaywrightScripts,
+  runPlaywrightScript,
+  type PlaywrightScriptItem,
+} from './playwright-scripts-service'
 
 function profileRowToUpdatePayload(row: ProfileRow): Record<string, unknown> {
   return {
@@ -331,6 +341,96 @@ function mergeStartParams(start: unknown): LaunchRequestParams | null {
   }
 }
 
+function playwrightScriptToPublic(item: PlaywrightScriptItem): Record<string, unknown> {
+  return {
+    folderId: item.folderId,
+    id: item.id ?? item.folderId,
+    name: item.name,
+    description: item.description,
+    version: item.version,
+    tags: item.tags,
+    defaultArgs: item.defaultArgs,
+    argsHint: item.argsHint,
+    requiresLaunchServer: item.requiresLaunchServer === true,
+    mcpDoc: item.mcpDoc,
+  }
+}
+
+async function handlePlaywrightScriptsList(res: ServerResponse): Promise<void> {
+  try {
+    const result = await listPlaywrightScripts()
+    writeJson(res, 200, {
+      ok: true,
+      rootDir: result.rootDir,
+      warnings: result.warnings,
+      scripts: result.scripts.map(playwrightScriptToPublic),
+    })
+  } catch (e) {
+    writeJson(res, 500, { ok: false, error: String(e instanceof Error ? e.message : e) })
+  }
+}
+
+async function handlePlaywrightScriptRunPost(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  let raw: unknown
+  try {
+    raw = await readBodyJson(req)
+  } catch {
+    writeJson(res, 400, { ok: false, error: 'invalid request body' })
+    return
+  }
+
+  const body = raw as Record<string, unknown>
+  const folderIdRaw =
+    typeof body.folderId === 'string'
+      ? body.folderId.trim()
+      : typeof body.id === 'string'
+        ? body.id.trim()
+        : ''
+
+  let extraArgs: string[] = []
+  if (Array.isArray(body.extraArgs)) {
+    extraArgs = body.extraArgs.filter((a): a is string => typeof a === 'string')
+  }
+
+  if (!folderIdRaw) {
+    writeJson(res, 400, { ok: false, error: 'folderId is required' })
+    return
+  }
+
+  try {
+    const { runId } = await runPlaywrightScript(folderIdRaw, extraArgs)
+    writeJson(res, 200, { ok: true, runId, folderId: folderIdRaw })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes('无效的脚本目录')) {
+      writeJson(res, 400, { ok: false, error: msg })
+      return
+    }
+    if (msg.includes('未找到脚本')) {
+      writeJson(res, 404, { ok: false, error: msg })
+      return
+    }
+    writeJson(res, 500, { ok: false, error: msg })
+  }
+}
+
+function handlePlaywrightScriptKill(res: ServerResponse, runId: string): void {
+  const id = String(runId ?? '').trim()
+  if (!id) {
+    writeJson(res, 400, { ok: false, error: 'runId is required' })
+    return
+  }
+  const killed = killPlaywrightScriptRun(id)
+  if (!killed) {
+    writeJson(res, 404, { ok: false, error: 'run not found or already finished' })
+    return
+  }
+  writeJson(res, 200, { ok: true, runId: id })
+}
+
 export async function startLaunchHttpServer(): Promise<number | null> {
   if (httpServer) {
     return httpListenPort
@@ -477,6 +577,12 @@ async function handleLaunchHttpRequest(req: IncomingMessage, res: ServerResponse
       return
     }
 
+    if (pathname === '/api/integrations/linkeoo-erp' && method === 'GET') {
+      const c = loadLinkeooErpConfig()
+      writeJson(res, 200, { baseUrl: c.baseUrl, apiKey: c.apiKey })
+      return
+    }
+
     if (pathname === '/api/profiles') {
       if (method === 'GET') {
         await handleListProfiles(res)
@@ -533,6 +639,24 @@ async function handleLaunchHttpRequest(req: IncomingMessage, res: ServerResponse
       }
       writeJson(res, 405, { ok: false, error: 'method not allowed' })
       return
+    }
+
+    if (pathname === '/api/playwright-scripts' && method === 'GET') {
+      await handlePlaywrightScriptsList(res)
+      return
+    }
+
+    if (pathname === '/api/playwright-scripts/run' && method === 'POST') {
+      await handlePlaywrightScriptRunPost(req, res)
+      return
+    }
+
+    {
+      const m = /^\/api\/playwright-scripts\/run\/([^/]+)$/.exec(pathname)
+      if (m && method === 'DELETE') {
+        handlePlaywrightScriptKill(res, m[1])
+        return
+      }
     }
 
     await handleCdpProxy(req, res)

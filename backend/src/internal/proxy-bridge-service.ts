@@ -861,7 +861,7 @@ function bridgeWorkRoot(): string {
   if (stateRoot) {
     return join(stateRoot, '_xray')
   }
-  return join(tmpdir(), 'ant-browser-desktop', '_xray')
+  return join(tmpdir(), 'nexbrowser-desktop', '_xray')
 }
 
 function toGoPlatformTuple(): { goos: string; goarch: string } {
