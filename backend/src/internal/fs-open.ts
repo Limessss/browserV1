@@ -46,10 +46,17 @@ export async function openPlaywrightScriptPathInExplorer(
   if (!fid || fid.includes('..') || fid.includes('/') || fid.includes('\\')) {
     throw new Error('脚本目录 id 无效')
   }
-  const rootDir = resolveAppRelativePath('playwright_scripts')
-  const folderDir = resolve(rootDir, fid)
+  const userRoot = resolveAppRelativePath('playwright_scripts')
+  const bundledRoot = resolveAppRelativePath('playwright_scripts.bundled')
+  const userFolder = resolve(userRoot, fid)
+  const bundledFolder = resolve(bundledRoot, fid)
+  const folderDir = existsSync(userFolder)
+    ? userFolder
+    : existsSync(bundledFolder)
+      ? bundledFolder
+      : userFolder
   if (!existsSync(folderDir)) {
-    throw new Error(`脚本目录不存在: ${folderDir}`)
+    throw new Error(`脚本目录不存在: ${userFolder}`)
   }
 
   const rel = String(relativePath ?? '').trim()

@@ -770,6 +770,8 @@ export interface PlaywrightScriptManifestInput {
 
 export interface PlaywrightScriptsListPayload {
   rootDir: string
+  /** 安装包内置脚本目录（仅打包形态常见），可为空 */
+  bundledRootDir: string
   scripts: PlaywrightScriptMeta[]
   warnings: string[]
 }
@@ -778,6 +780,7 @@ function normalizePlaywrightList(raw: unknown): PlaywrightScriptsListPayload {
   const r = raw as Record<string, unknown> | null
   return {
     rootDir: String(r?.rootDir ?? ''),
+    bundledRootDir: String(r?.bundledRootDir ?? ''),
     scripts: Array.isArray(r?.scripts) ? (r.scripts as PlaywrightScriptMeta[]) : [],
     warnings: Array.isArray(r?.warnings) ? (r.warnings as string[]) : [],
   }
@@ -792,7 +795,12 @@ export async function fetchPlaywrightScripts(): Promise<PlaywrightScriptsListPay
   if (goApp?.ListPlaywrightScripts) {
     return normalizePlaywrightList(await goApp.ListPlaywrightScripts())
   }
-  return { rootDir: '', scripts: [], warnings: ['无法连接主进程：ListPlaywrightScripts 不可用'] }
+  return {
+    rootDir: '',
+    bundledRootDir: '',
+    scripts: [],
+    warnings: ['无法连接主进程：ListPlaywrightScripts 不可用'],
+  }
 }
 
 export async function runPlaywrightScriptApi(

@@ -25,6 +25,7 @@ export function PlaywrightScriptsPage() {
   const [loading, setLoading] = useState(true)
   const [payload, setPayload] = useState<PlaywrightScriptsListPayload>({
     rootDir: '',
+    bundledRootDir: '',
     scripts: [],
     warnings: [],
   })
@@ -245,8 +246,15 @@ export function PlaywrightScriptsPage() {
               ，一键用系统 Node 执行入口 <code className="text-xs">.mjs</code>（工作目录为应用根目录，与 README 中命令一致）。
             </p>
             {payload.rootDir ? (
-              <p className="text-xs text-[var(--color-text-muted)] mt-2 break-all">
-                扫描根路径：<code>{payload.rootDir}</code>
+              <p className="text-xs text-[var(--color-text-muted)] mt-2 break-all space-y-1">
+                <span className="block">
+                  用户脚本目录（优先）：<code>{payload.rootDir}</code>
+                </span>
+                {payload.bundledRootDir ? (
+                  <span className="block">
+                    安装包内置：<code>{payload.bundledRootDir}</code>
+                  </span>
+                ) : null}
               </p>
             ) : null}
           </div>
@@ -387,7 +395,8 @@ export function PlaywrightScriptsPage() {
           <div ref={logEndRef} />
         </pre>
         <p className="text-[10px] text-[var(--color-text-muted)] mt-2">
-          打包分发时请将 <code>playwright_scripts</code> 目录置于可执行文件同级，或自行配置资源拷贝；开发态从项目根目录扫描。
+          打包后内置脚本在 <code>playwright_scripts.bundled</code>；首次运行会将缺失文件复制到用户目录{' '}
+          <code>playwright_scripts</code>（不覆盖已有文件）。同名文件以用户目录为准。
         </p>
       </Card>
 

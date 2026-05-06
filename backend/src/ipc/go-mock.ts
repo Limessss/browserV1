@@ -51,6 +51,7 @@ export async function invokeGoMock(method: string, _args: unknown[]): Promise<un
     case 'ListPlaywrightScripts':
       return {
         rootDir: '',
+        bundledRootDir: '',
         scripts: [] as unknown[],
         warnings: ['数据库未就绪：Playwright 脚本列表不可用'],
       }

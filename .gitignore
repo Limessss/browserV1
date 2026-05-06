@@ -9,3 +9,7 @@ chrome/**
 !chrome/.gitkeep
 data/**
 !data/.gitkeep
+
+# 桥接二进制由 scripts/fetch-xray-windows.mjs 在打包前下载，勿提交
+bin/**/xray.exe
+bin/**/sing-box.exe

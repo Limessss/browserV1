@@ -362,6 +362,7 @@ async function handlePlaywrightScriptsList(res: ServerResponse): Promise<void> {
     writeJson(res, 200, {
       ok: true,
       rootDir: result.rootDir,
+      bundledRootDir: result.bundledRootDir,
       warnings: result.warnings,
       scripts: result.scripts.map(playwrightScriptToPublic),
     })

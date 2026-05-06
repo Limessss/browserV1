@@ -13,9 +13,10 @@
     "preview": "electron-vite preview",
     "lint": "tsc --noEmit -p backend/tsconfig.json && tsc --noEmit -p frontend/tsconfig.json",
     "smoke:runtime": "node scripts/smoke-runtime-check.mjs",
+    "fetch:xray:win": "node scripts/fetch-xray-windows.mjs",
     "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:win:installer": "npm run build && electron-builder --win --x64 -c.win.target=nsis"
+    "dist:win": "npm run build && npm run fetch:xray:win && electron-builder --win",
+    "dist:win:installer": "npm run build && npm run fetch:xray:win && electron-builder --win --x64 -c.win.target=nsis"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",
@@ -81,8 +82,15 @@
     ],
     "extraFiles": [
       {
+        "from": "bin",
+        "to": "bin",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
         "from": "playwright_scripts",
-        "to": "playwright_scripts",
+        "to": "playwright_scripts.bundled",
         "filter": [
           "**/*"
         ]
