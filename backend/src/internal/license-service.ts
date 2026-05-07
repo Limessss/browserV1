@@ -1,5 +1,6 @@
 /**
- * 兑换码 / GitHub Star / 发卡器（对齐 Ant-Browser app_license.go + config.RewardForUsedKey）。
+ * 兑换码 / 发卡器（对齐 Ant-Browser app_license.go + config.RewardForUsedKey）。
+ * 历史版本可能在 used_cd_keys 中写入 GITHUB_STAR_REWARD，额度仍按 +50 计入；已移除领取入口。
  */
 import { createHash, randomInt } from 'node:crypto'
 
@@ -30,7 +31,7 @@ function minimumProfileLimitForUsedKeys(keys: string[]): number {
 }
 
 export function generateChecksum(payload: string): string {
-  const salt = 'ANT-LITE-KEY-SALT-VER-1'
+  const salt = 'NEX-LITE-KEY-SALT-VER-1'
   const hash = createHash('sha256').update(payload + salt).digest('hex')
   return hash.slice(0, 8).toUpperCase()
 }
@@ -54,7 +55,7 @@ export function redeemCdKey(rawKey: string): void {
   if (!cdkey) {
     throw new Error('兑换码不能为空')
   }
-  if (!cdkey.startsWith('ANT-')) {
+  if (!cdkey.startsWith('NEX-')) {
     throw new Error('无效的兑换码格式')
   }
 
@@ -91,28 +92,6 @@ export function redeemCdKey(rawKey: string): void {
   saveRootYamlRaw(raw)
 }
 
-export function redeemGithubStar(): void {
-  const raw = loadRootYamlRaw()
-  const app = ((raw.app as Record<string, unknown>) ?? {}) as Record<string, unknown>
-  const usedKeys = normalizeUsedKeys(app.used_cd_keys)
-  const starKey = GITHUB_STAR_REWARD_KEY.toUpperCase()
-
-  if (usedKeys.some((k) => k.toUpperCase() === starKey)) {
-    throw new Error('您已经领取过 GitHub Star 的赠送额度啦！')
-  }
-
-  usedKeys.push(starKey)
-  const minLimit = minimumProfileLimitForUsedKeys(usedKeys)
-  const prevMax = Number(app.max_profile_limit ?? DEFAULT_MAX_PROFILE_LIMIT) || DEFAULT_MAX_PROFILE_LIMIT
-
-  raw.app = {
-    ...app,
-    used_cd_keys: usedKeys,
-    max_profile_limit: Math.max(prevMax, minLimit),
-  }
-  saveRootYamlRaw(raw)
-}
-
 const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
 export function generateCdKeys(count: number): string[] {
@@ -127,7 +106,7 @@ export function generateCdKeys(count: number): string[] {
     }
     const b = chars.join('')
     const part = (from: number, to: number) => b.slice(from, to)
-    const payload = `ANT-${part(0, 4)}-${part(4, 8)}-${part(8, 12)}-${part(12, 16)}`
+    const payload = `NEX-${part(0, 4)}-${part(4, 8)}-${part(8, 12)}-${part(12, 16)}`
     const checksum = generateChecksum(payload)
     keys.push(`${payload}-${checksum}`)
   }

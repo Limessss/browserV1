@@ -1,12 +1,9 @@
 ﻿import { useEffect, useState } from 'react'
-import { Monitor, Play, Shield, Cpu, ArrowRight, ExternalLink, Globe, Settings } from 'lucide-react'
+import { Monitor, Play, Shield, Cpu, ArrowRight, Globe, Settings } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Card, Button, toast } from '../../shared/components'
-import { fetchDashboardStats, redeemCDKey, redeemGithubStar, reloadConfig } from './api'
+import { fetchDashboardStats, redeemCDKey, reloadConfig } from './api'
 import type { DashboardStats } from './types'
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime'
-import { PROJECT_GITHUB_URL } from '../../config/links'
-
 interface StatCardProps {
   title: string
   value: string | number
@@ -75,24 +72,6 @@ export function DashboardPage() {
     } else {
       toast.error(result.message || '兑换失败')
     }
-  }
-
-  const handleClaimStarGift = async () => {
-    setRedeeming(true)
-    const starRes = await redeemGithubStar()
-    setRedeeming(false)
-    if (starRes.success) {
-      toast.success('感谢您的支持！已额外赠送 50 个永久额度！')
-      setCdKey('')
-      load()
-    } else {
-      toast.error(starRes.message || '领取失败')
-    }
-  }
-
-  const handleOpenGithubStarGift = async () => {
-    BrowserOpenURL(PROJECT_GITHUB_URL)
-    await handleClaimStarGift()
   }
 
   const v = (n: number) => loading ? '-' : n.toString()
@@ -181,7 +160,7 @@ export function DashboardPage() {
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="输入兑换码 (如 ANT-...)"
+                placeholder="输入兑换码 (如 NEX-...)"
                 value={cdKey}
                 onChange={e => setCdKey(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleRedeem()}
@@ -199,22 +178,6 @@ export function DashboardPage() {
                 {loading ? '-' : `${stats.totalInstances} / ${stats.maxProfileLimit}`}
               </span>
             </p>
-
-            <div className="mt-4 rounded-lg border border-blue-500/20 bg-blue-500/10 p-4">
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-sm text-[var(--color-text-primary)]">点亮 GitHub Star 后，可再获赠 50 个永久额度</p>
-                <button
-                  type="button"
-                  className="shrink-0 rounded-full p-2 text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/10 disabled:opacity-50"
-                  onClick={handleOpenGithubStarGift}
-                  disabled={redeeming}
-                  title="打开 GitHub 并领取赠送"
-                  aria-label="打开 GitHub 并领取赠送"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
           </div>
         </Card>
       </div>

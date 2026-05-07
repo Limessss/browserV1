@@ -73,7 +73,7 @@ export async function createBrowserProfile(input: BrowserProfileInput): Promise<
   const profile: BrowserProfile = {
     profileId: `mock-${Date.now()}`,
     ...input,
-    keywords: input.keywords || {},
+    keywords: Array.isArray(input.keywords) ? input.keywords : [],
     running: false,
     debugPort: 0,
     debugReady: false,
@@ -649,13 +649,15 @@ export async function resetBookmarks(): Promise<boolean> {
 
 export async function setProfileKeywords(profileId: string, keywords: string[]): Promise<BrowserProfile | null> {
   const bindings: any = await getBindings()
+  const id = String(profileId ?? '').trim()
+  const kw = Array.isArray(keywords) ? keywords.map((x) => String(x)) : []
   if (bindings?.BrowserProfileSetKeywords) {
-    return (await bindings.BrowserProfileSetKeywords(profileId, keywords)) || null
+    return (await bindings.BrowserProfileSetKeywords(id, kw)) || null
   }
   mockProfiles = mockProfiles.map(p =>
-    p.profileId === profileId ? { ...p, keywords, updatedAt: new Date().toISOString() } : p
+    p.profileId === id ? { ...p, keywords: kw, updatedAt: new Date().toISOString() } : p
   )
-  return mockProfiles.find(p => p.profileId === profileId) || null
+  return mockProfiles.find(p => p.profileId === id) || null
 }
 
 // ============================================================================

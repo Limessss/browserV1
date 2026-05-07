@@ -1,24 +1,13 @@
-import type {
-  AuthorProfileConfig,
-  ProfileChannelConfig,
-  ProfileIconKey,
-  ProjectProfileActionConfig,
-  ProjectProfileConfig,
-} from '../../config/profile.config'
+import type { ProjectProfileConfig } from '../../config/profile.config'
 
-export type ProfileChannel = ProfileChannelConfig
-export type AuthorProfile = AuthorProfileConfig
-export type ProfileAction = ProjectProfileActionConfig
 export type ProfileProject = ProjectProfileConfig
-export type IconKey = ProfileIconKey
 
 export interface ProfileLoadMeta {
-  source: 'remote' | 'default'
+  source: 'default'
   message?: string
 }
 
 export interface ProfilePageData {
-  author: AuthorProfile
   project: ProfileProject
   meta: ProfileLoadMeta
 }

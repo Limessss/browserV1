@@ -172,7 +172,6 @@ const appMethodNames = [
   'OpenUserDataDir',
   'QuitAppOnly',
   'RedeemCDKey',
-  'RedeemGithubStar',
   'ReloadConfig',
   'RunPlaywrightScript',
   'SavePlaywrightScriptManifest',

@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Activity, CheckCircle, ChevronDown, ChevronRight, ChevronUp, Copy, Edit2, ExternalLink, FileText, Key, Pencil, Play, Plus, RefreshCw, RotateCcw, Settings, Sliders, Square, Star, Trash2, XCircle, Gift, LayoutGrid, List } from 'lucide-react'
+import { Activity, CheckCircle, ChevronDown, ChevronRight, ChevronUp, Copy, Edit2, FileText, Key, Pencil, Play, Plus, RefreshCw, RotateCcw, Settings, Sliders, Square, Star, Trash2, XCircle, Gift, LayoutGrid, List } from 'lucide-react'
 import { Badge, Button, Card, FormItem, Input, Modal, StatCard, Table, Textarea, toast } from '../../../shared/components'
-import { fetchDashboardStats, redeemCDKey, redeemGithubStar, reloadConfig } from '../../dashboard/api'
+import { fetchDashboardStats, redeemCDKey, reloadConfig } from '../../dashboard/api'
 import type { TableColumn } from '../../../shared/components/Table'
 import type { BrowserCore, BrowserCoreInput, BrowserProfile, BrowserProxy, BrowserSettings, BrowserGroupWithCount } from '../types'
 import { InstanceFilterBar, EMPTY_FILTERS } from '../components/InstanceFilterBar'
 import type { InstanceFilters } from '../components/InstanceFilterBar'
+import { TagFilterBar } from '../components/TagFilterBar'
+import { fuzzyMatch, fuzzyMatchAnyKeyword } from '../utils/fuzzySearch'
 import { KeywordsModal } from '../components/KeywordsModal'
-import { EventsOn, BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
-import { PROJECT_GITHUB_URL } from '../../../config/links'
+import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import { resolveActionErrorMessage, resolveActionFeedback } from '../utils/actionErrors'
 import {
   copyBrowserProfile,
@@ -223,8 +224,25 @@ export function BrowserListPage() {
     try {
       const saved = localStorage.getItem('browser:filters')
       if (saved) {
-        const parsed = JSON.parse(saved)
-        return { ...EMPTY_FILTERS, ...parsed, tags: new Set(parsed.tags || []) }
+        const parsed = JSON.parse(saved) as Record<string, unknown>
+        const tags = new Set(Array.isArray(parsed.tags) ? (parsed.tags as string[]) : [])
+        let textSearch = ''
+        if (typeof parsed.textSearch === 'string') {
+          textSearch = parsed.textSearch
+        } else {
+          const k = typeof parsed.keyword === 'string' ? parsed.keyword : ''
+          const w = typeof parsed.kwSearch === 'string' ? parsed.kwSearch : ''
+          textSearch = [k, w].filter(Boolean).join(' ').trim()
+        }
+        return {
+          ...EMPTY_FILTERS,
+          textSearch,
+          status: (parsed.status as InstanceFilters['status']) ?? '',
+          proxyId: String(parsed.proxyId ?? ''),
+          coreId: String(parsed.coreId ?? ''),
+          groupId: String(parsed.groupId ?? ''),
+          tags,
+        }
       }
     } catch { /* ignore */ }
     return EMPTY_FILTERS
@@ -517,7 +535,14 @@ export function BrowserListPage() {
       if (filters.groupId === '__ungrouped__' && p.groupId) return false
       if (filters.groupId && filters.groupId !== '__ungrouped__' && p.groupId !== filters.groupId) return false
 
-      if (filters.keyword && !p.profileName.toLowerCase().includes(filters.keyword.toLowerCase())) return false
+      if (filters.textSearch) {
+        const q = filters.textSearch
+        const nameHit = fuzzyMatch(p.profileName || '', q)
+        const code = (p.launchCode || '').trim()
+        const codeHit = code.length > 0 && fuzzyMatch(code, q)
+        const kwHit = fuzzyMatchAnyKeyword(p.keywords, q)
+        if (!nameHit && !codeHit && !kwHit) return false
+      }
       if (filters.status === 'running' && !p.running) return false
       if (filters.status === 'stopped' && p.running) return false
       if (filters.proxyId === '__none__' && (p.proxyId || p.proxyConfig)) return false
@@ -526,11 +551,11 @@ export function BrowserListPage() {
         const effectiveCore = resolveProfileCore(p)
         if (!effectiveCore || effectiveCore.coreId !== filters.coreId) return false
       }
-      if (filters.tags.size > 0 && !p.tags?.some(t => filters.tags.has(t))) return false
-      if (filters.kwSearch) {
-        const q = filters.kwSearch.toLowerCase()
-        const hit = p.keywords?.some(v => v.toLowerCase().includes(q))
-        if (!hit) return false
+      if (filters.tags.size > 0) {
+        const pts = new Set(p.tags || [])
+        for (const t of filters.tags) {
+          if (!pts.has(t)) return false
+        }
       }
       return true
     }).sort((a, b) => naturalCompare(a.profileName, b.profileName))
@@ -821,24 +846,6 @@ export function BrowserListPage() {
     }
   }
 
-  const handleClaimStarGift = async () => {
-    setRedeeming(true)
-    const starRes = await redeemGithubStar()
-    setRedeeming(false)
-    if (starRes.success) {
-      toast.success('感谢您的支持！已额外赠送 50 个永久额度！')
-      setCdKey('')
-      loadQuota()
-    } else {
-      toast.error(starRes.message || '领取失败')
-    }
-  }
-
-  const handleOpenGithubStarGift = async () => {
-    BrowserOpenURL(PROJECT_GITHUB_URL)
-    await handleClaimStarGift()
-  }
-
   const columns: TableColumn<BrowserProfile>[] = [
     {
       key: 'selection',
@@ -913,7 +920,7 @@ export function BrowserListPage() {
       key: 'keywords',
       title: '关键字',
       width: 200,
-      render: (value) => <KeywordInlineRow keywords={value || []} />,
+      render: (value) => <KeywordInlineRow keywords={Array.isArray(value) ? value : []} />,
     },
     {
       key: 'updatedAt',
@@ -1035,6 +1042,32 @@ export function BrowserListPage() {
         </>
       )}
 
+      {headerCollapsed && (
+        <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-4 py-3 space-y-2 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={filters.textSearch}
+              onChange={e => setFilters(prev => ({ ...prev, textSearch: e.target.value }))}
+              placeholder="搜索实例名称、快捷码、关键字…"
+              className="flex-1 min-w-[220px]"
+            />
+            <Button variant="secondary" size="sm" type="button" onClick={() => setHeaderCollapsed(false)}>
+              展开完整筛选
+            </Button>
+          </div>
+          <TagFilterBar
+            tags={allTags}
+            selected={filters.tags}
+            onChange={tags => setFilters(prev => ({ ...prev, tags }))}
+          />
+          {allTags.length > 0 && (
+            <p className="text-[11px] text-[var(--color-text-muted)]">
+              多选标签时，实例须同时包含所选全部标签
+            </p>
+          )}
+        </div>
+      )}
+
       {/* 批量操作工具栏 */}
       <BatchToolbar
         selectedCount={selectedIds.size}
@@ -1149,7 +1182,7 @@ export function BrowserListPage() {
                     <div className="border-t border-[var(--color-border-muted)]/50 pt-2 flex items-start gap-2 flex-1 min-h-0">
                       <span className="text-xs font-medium text-[var(--color-text-primary)] shrink-0 pt-0.5">系统关键字</span>
                       <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-                        <KeywordInlineRow keywords={record.keywords || []} />
+                        <KeywordInlineRow keywords={Array.isArray(record.keywords) ? record.keywords : []} />
                       </div>
                     </div>
                   </div>
@@ -1269,7 +1302,7 @@ export function BrowserListPage() {
           open={kwModal.open}
           profileId={kwModal.profile.profileId}
           profileName={kwModal.profile.profileName}
-          initialKeywords={kwModal.profile.keywords || []}
+          initialKeywords={Array.isArray(kwModal.profile.keywords) ? kwModal.profile.keywords : []}
           onClose={closeKwModal}
           onSaved={(keywords) => {
             updateProfilesState(prev => prev.map(p =>
@@ -1311,29 +1344,13 @@ export function BrowserListPage() {
               <Input
                 value={cdKey}
                 onChange={e => setCdKey(e.target.value)}
-                placeholder="输入兑换码 (如 ANT-...)"
+                placeholder="输入兑换码 (如 NEX-...)"
                 onKeyDown={e => e.key === 'Enter' && handleRedeem()}
                 className="flex-1"
               />
               <Button onClick={handleRedeem} loading={redeeming} disabled={!cdKey.trim()}>
                 进行兑换
               </Button>
-            </div>
-          </div>
-
-          <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-sm text-[var(--color-text-primary)]">点亮 GitHub Star 后，可再获赠 50 个永久额度</p>
-              <button
-                type="button"
-                className="shrink-0 rounded-full p-2 text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/10 disabled:opacity-50"
-                onClick={handleOpenGithubStarGift}
-                disabled={redeeming}
-                title="打开 GitHub 并领取赠送"
-                aria-label="打开 GitHub 并领取赠送"
-              >
-                <ExternalLink className="w-4 h-4" />
-              </button>
             </div>
           </div>
         </div>

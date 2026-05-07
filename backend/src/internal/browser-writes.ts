@@ -21,8 +21,51 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
+/** sql.js 的 bind 不接受 undefined，库表 NULL 读回后也可能缺失字段 */
+function bindSqlText(v: unknown): string {
+  if (v === undefined || v === null) {
+    return ''
+  }
+  return typeof v === 'string' ? v : String(v)
+}
+
 function jsonArr(arr: string[] | undefined): string {
   return JSON.stringify(arr ?? [])
+}
+
+/** IPC / 历史数据可能传入数组或类数组对象；统一为去重后的关键字列表 */
+function normalizeKeywordsPayload(raw: unknown): string[] {
+  if (raw == null) {
+    return []
+  }
+  if (Array.isArray(raw)) {
+    return raw.map((x) => String(x).trim()).filter(Boolean)
+  }
+  if (typeof raw === 'string') {
+    const t = raw.trim()
+    if (!t) {
+      return []
+    }
+    try {
+      const v = JSON.parse(t) as unknown
+      if (Array.isArray(v)) {
+        return v.map((x) => String(x).trim()).filter(Boolean)
+      }
+    } catch {
+      return [t]
+    }
+    return [t]
+  }
+  if (typeof raw === 'object') {
+    const o = raw as Record<string, unknown>
+    const keys = Object.keys(o)
+      .filter((k) => /^\d+$/.test(k))
+      .sort((a, b) => Number(a) - Number(b))
+    if (keys.length > 0) {
+      return keys.map((k) => String(o[k] ?? '').trim()).filter(Boolean)
+    }
+  }
+  return []
 }
 
 export type ProfileInputShape = {
@@ -192,24 +235,24 @@ export function upsertProfileRow(db: Database, r: ProfileRow): void {
        default_start_urls = excluded.default_start_urls,
        updated_at       = excluded.updated_at`,
     [
-      r.profile_id,
-      r.profile_name,
-      r.user_data_dir,
-      r.core_id,
-      r.fingerprint_args,
-      r.proxy_id,
-      r.proxy_config,
-      r.proxy_bind_source_id,
-      r.proxy_bind_source_url,
-      r.proxy_bind_name,
-      r.proxy_bind_updated_at,
-      r.launch_args,
-      r.tags,
-      r.keywords,
-      r.group_id,
-      r.default_start_urls,
-      r.created_at,
-      r.updated_at,
+      bindSqlText(r.profile_id),
+      bindSqlText(r.profile_name),
+      bindSqlText(r.user_data_dir),
+      bindSqlText(r.core_id),
+      bindSqlText(r.fingerprint_args),
+      bindSqlText(r.proxy_id),
+      bindSqlText(r.proxy_config),
+      bindSqlText(r.proxy_bind_source_id),
+      bindSqlText(r.proxy_bind_source_url),
+      bindSqlText(r.proxy_bind_name),
+      bindSqlText(r.proxy_bind_updated_at),
+      bindSqlText(r.launch_args),
+      bindSqlText(r.tags),
+      bindSqlText(r.keywords),
+      bindSqlText(r.group_id),
+      bindSqlText(r.default_start_urls),
+      bindSqlText(r.created_at),
+      bindSqlText(r.updated_at),
     ],
   )
 }
@@ -400,11 +443,12 @@ export function browserProfileSetKeywords(
   profileId: string,
   keywords: unknown,
 ): Record<string, unknown> {
-  const existing = getProfileRow(db, profileId)
+  const id = String(profileId ?? '').trim()
+  const existing = getProfileRow(db, id)
   if (!existing) {
     throw new Error('profile not found')
   }
-  const kw = Array.isArray(keywords) ? keywords.map((x) => String(x)) : []
+  const kw = normalizeKeywordsPayload(keywords)
   const now = nowIso()
   const row: ProfileRow = {
     ...existing,
@@ -413,7 +457,7 @@ export function browserProfileSetKeywords(
   }
   upsertProfileRow(db, row)
   persistSqlite()
-  const out = getProfileFrontendById(db, profileId)
+  const out = getProfileFrontendById(db, id)
   if (!out) {
     throw new Error('更新关键字后读取失败')
   }
@@ -426,8 +470,12 @@ export function browserProfileBatchSetTags(
   tags: unknown,
   replace: unknown,
 ): void {
-  const ids = Array.isArray(profileIds) ? profileIds.map((x) => String(x)) : []
-  const tagList = Array.isArray(tags) ? tags.map((x) => String(x)) : []
+  const ids = Array.isArray(profileIds)
+    ? profileIds.filter((x) => x != null).map((x) => String(x))
+    : []
+  const tagList = Array.isArray(tags)
+    ? tags.filter((x) => x != null).map((x) => String(x))
+    : []
   const rep = Boolean(replace)
 
   for (const pid of ids) {

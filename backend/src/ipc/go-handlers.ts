@@ -71,7 +71,7 @@ import {
 import { validateProxyConfig } from '../internal/proxy-validate'
 import { browserProxyFetchClashByURL } from '../internal/clash-fetch-service'
 import { fetchRemoteAuthorProfile } from '../internal/remote-profile-fetch'
-import { generateCdKeys, redeemCdKey, redeemGithubStar } from '../internal/license-service'
+import { generateCdKeys, redeemCdKey } from '../internal/license-service'
 import { mergeRuntimeIntoProfileRecord } from '../internal/browser-runtime-store'
 import {
   browserClearCookies,
@@ -465,19 +465,6 @@ export async function invokeGoCall(method: string, args: unknown[]): Promise<unk
   if (method === 'RedeemCDKey') {
     try {
       redeemCdKey(String(args[0] ?? ''))
-      return undefined
-    } catch (e) {
-      console.error('[go-call]', method, e)
-      if (e instanceof Error) {
-        throw e
-      }
-      throw new Error(String(e))
-    }
-  }
-
-  if (method === 'RedeemGithubStar') {
-    try {
-      redeemGithubStar()
       return undefined
     } catch (e) {
       console.error('[go-call]', method, e)

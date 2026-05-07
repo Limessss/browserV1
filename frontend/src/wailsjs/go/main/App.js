@@ -306,10 +306,6 @@ export function RedeemCDKey(arg1) {
   return window['go']['main']['App']['RedeemCDKey'](arg1);
 }
 
-export function RedeemGithubStar() {
-  return window['go']['main']['App']['RedeemGithubStar']();
-}
-
 export function ReloadConfig() {
   return window['go']['main']['App']['ReloadConfig']();
 }

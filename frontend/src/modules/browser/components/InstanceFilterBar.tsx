@@ -5,27 +5,26 @@ import { TagFilterBar } from './TagFilterBar'
 import type { BrowserCore, BrowserProxy, BrowserGroupWithCount } from '../types'
 
 export interface InstanceFilters {
-  keyword: string
+  /** 模糊匹配：实例名称、快捷码、关键字词条（任一命中即可） */
+  textSearch: string
   status: '' | 'running' | 'stopped'
   proxyId: string
   coreId: string
   tags: Set<string>
-  kwSearch: string
   groupId: string   // '' = 全部, '__ungrouped__' = 未分组, 其他 = 具体分组ID
 }
 
 export const EMPTY_FILTERS: InstanceFilters = {
-  keyword: '',
+  textSearch: '',
   status: '',
   proxyId: '',
   coreId: '',
   tags: new Set(),
-  kwSearch: '',
   groupId: '',
 }
 
 export function isFiltersEmpty(f: InstanceFilters) {
-  return !f.keyword && !f.status && !f.proxyId && !f.coreId && f.tags.size === 0 && !f.kwSearch && !f.groupId
+  return !f.textSearch && !f.status && !f.proxyId && !f.coreId && f.tags.size === 0 && !f.groupId
 }
 
 interface Props {
@@ -44,7 +43,7 @@ export function InstanceFilterBar({ filters, onChange, proxies, cores, allTags, 
     onChange({ ...filters, [key]: value })
 
   const hasFilter = !isFiltersEmpty(filters)
-  const activeCount = [filters.keyword, filters.status, filters.proxyId, filters.coreId, filters.kwSearch, filters.groupId].filter(Boolean).length + filters.tags.size
+  const activeCount = [filters.textSearch, filters.status, filters.proxyId, filters.coreId, filters.groupId].filter(Boolean).length + filters.tags.size
 
   return (
     <div className="space-y-2">
@@ -66,10 +65,10 @@ export function InstanceFilterBar({ filters, onChange, proxies, cores, allTags, 
         <>
           <div className="flex items-center gap-2 flex-wrap">
             <Input
-              value={filters.keyword}
-              onChange={e => set('keyword', e.target.value)}
-              placeholder="搜索名称..."
-              style={{ width: '180px' }}
+              value={filters.textSearch}
+              onChange={e => set('textSearch', e.target.value)}
+              placeholder="搜索实例名称、快捷码、关键字…"
+              className="flex-1 min-w-[220px]"
             />
             <Select
               value={filters.status}
@@ -110,12 +109,6 @@ export function InstanceFilterBar({ filters, onChange, proxies, cores, allTags, 
               ]}
               style={{ width: '140px' }}
             />
-            <Input
-              value={filters.kwSearch}
-              onChange={e => set('kwSearch', e.target.value)}
-              placeholder="搜索关键字值..."
-              className="flex-1 min-w-[160px]"
-            />
             {hasFilter && (
               <button
                 onClick={() => onChange({ ...EMPTY_FILTERS, tags: new Set() })}
@@ -126,11 +119,18 @@ export function InstanceFilterBar({ filters, onChange, proxies, cores, allTags, 
               </button>
             )}
           </div>
-          <TagFilterBar
-            tags={allTags}
-            selected={filters.tags}
-            onChange={tags => set('tags', tags)}
-          />
+          <div className="space-y-1">
+            <TagFilterBar
+              tags={allTags}
+              selected={filters.tags}
+              onChange={tags => set('tags', tags)}
+            />
+            {allTags.length > 0 && (
+              <p className="text-[11px] text-[var(--color-text-muted)] pl-0.5">
+                多选标签时，实例须同时包含所选全部标签
+              </p>
+            )}
+          </div>
         </>
       )}
     </div>

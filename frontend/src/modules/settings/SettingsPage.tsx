@@ -380,38 +380,6 @@ export function SettingsPage() {
         <ThemeSwitcher />
       </Card>
 
-      {/* 基础设置 */}
-      <Card title="基础设置" subtitle="应用的基本信息配置">
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormItem label="应用名称" required>
-              <Input
-                value={settings.appName}
-                onChange={e => handleChange('appName', e.target.value)}
-                placeholder="请输入应用名称"
-              />
-            </FormItem>
-            <FormItem label="语言">
-              <Select
-                value={settings.language}
-                onChange={e => handleChange('language', e.target.value)}
-                options={[
-                  { value: 'zh-CN', label: '简体中文' },
-                  { value: 'en-US', label: 'English' },
-                ]}
-              />
-            </FormItem>
-          </div>
-          <FormItem label="应用描述">
-            <Input
-              value={settings.appDescription}
-              onChange={e => handleChange('appDescription', e.target.value)}
-              placeholder="请输入应用描述"
-            />
-          </FormItem>
-        </div>
-      </Card>
-
       {/* 第三方接口：链氪 ERP */}
       <Card
         title="第三方接口配置"

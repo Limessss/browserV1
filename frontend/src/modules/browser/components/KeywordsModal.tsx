@@ -18,7 +18,8 @@ export function KeywordsModal({ profileId, profileName, initialKeywords, open, o
 
   useEffect(() => {
     if (!open) return
-    const init = (initialKeywords || []).filter(Boolean)
+    const source = Array.isArray(initialKeywords) ? initialKeywords : []
+    const init = source.map((s) => String(s).trim()).filter(Boolean)
     setItems(init.length > 0 ? [...init] : [''])
   }, [open, initialKeywords])
 
@@ -38,8 +39,10 @@ export function KeywordsModal({ profileId, profileName, initialKeywords, open, o
       toast.success('关键字已保存')
       onSaved(keywords)
       onClose()
-    } catch {
-      toast.error('保存失败')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('[KeywordsModal]', e)
+      toast.error(msg ? `保存失败：${msg}` : '保存失败')
     } finally {
       setSaving(false)
     }

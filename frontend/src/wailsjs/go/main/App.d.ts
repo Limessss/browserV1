@@ -165,8 +165,6 @@ export function QuitAppOnly():Promise<void>;
 
 export function RedeemCDKey(arg1:string):Promise<void>;
 
-export function RedeemGithubStar():Promise<void>;
-
 export function ReloadConfig():Promise<void>;
 
 export function SaveBrowserProxies(arg1:Array<config.BrowserProxy>):Promise<void>;

@@ -43,19 +43,6 @@ export async function redeemCDKey(cdkey: string): Promise<{ success: boolean, me
   return { success: false, message: '系统 API 未就绪' }
 }
 
-export async function redeemGithubStar(): Promise<{ success: boolean, message?: string }> {
-  const bindings: any = await getBindings()
-  if (bindings?.RedeemGithubStar) {
-    try {
-      await bindings.RedeemGithubStar()
-      return { success: true }
-    } catch (e: any) {
-      return { success: false, message: e.message || '领取失败' }
-    }
-  }
-  return { success: false, message: '系统 API 未就绪' }
-}
-
 export async function reloadConfig(): Promise<void> {
   const bindings: any = await getBindings()
   if (bindings?.ReloadConfig) {
