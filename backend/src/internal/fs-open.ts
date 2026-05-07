@@ -5,7 +5,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 import { shell } from 'electron'
 import { loadBrowserSettingsMerged } from './app-config-store'
-import { resolveAppRelativePath } from './electron-paths'
+import { resolveAppRelativePath, resolveCoreStoredPath } from './electron-paths'
 
 export async function openUserDataDir(subDir: string): Promise<void> {
   const rel = subDir.trim()
@@ -28,7 +28,7 @@ export async function openCorePathInExplorer(corePath: string): Promise<void> {
   if (!p) {
     throw new Error('内核路径不能为空')
   }
-  const fullPath = isAbsolute(p) ? p : resolveAppRelativePath(p)
+  const fullPath = isAbsolute(p) ? p : resolveCoreStoredPath(p)
   if (!existsSync(fullPath)) {
     throw new Error(`路径不存在: ${fullPath}`)
   }

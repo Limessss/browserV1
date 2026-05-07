@@ -13,6 +13,9 @@ let db: Database | null = null
 let lastInitError: Error | null = null
 let persistedPath = ''
 
+/** 与主库同一 WASM 模块构造，供备份合并打开第二份内存库（sql.js 无法用 ATTACH 挂载磁盘路径） */
+let SqlDatabaseCtor: (new (data?: Uint8Array | Buffer) => Database) | null = null
+
 const require = createRequire(import.meta.url)
 const initSqlJs = require('sql.js/dist/sql-wasm.js') as (opts: {
   locateFile: (file: string) => string
@@ -42,6 +45,7 @@ export async function initSqlite(app: App): Promise<void> {
     const SQL = await initSqlJs({
       locateFile: (file: string) => join(wasmDirectory(), file),
     })
+    SqlDatabaseCtor = SQL.Database
 
     let database: Database
     if (existsSync(persistedPath)) {
@@ -65,6 +69,14 @@ export async function initSqlite(app: App): Promise<void> {
 
 export function getSqlite(): Database | null {
   return db
+}
+
+/** 必须在 initSqlite 成功之后调用 */
+export function openBackupDatabaseBuffer(buf: Uint8Array | Buffer): Database {
+  if (!SqlDatabaseCtor) {
+    throw new Error('SQLite 尚未初始化，无法打开备份库')
+  }
+  return new SqlDatabaseCtor(buf)
 }
 
 export function getLastSqliteError(): Error | null {

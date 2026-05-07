@@ -54,7 +54,18 @@ function getWindow(): BrowserWindow | null {
   return mainWindow
 }
 
+/** 窗口左上角图标（开发态 cwd/build；打包后 resources/icon.png，见 package.json extraResources） */
+function resolveWindowIconPath(): string | undefined {
+  if (isDev) {
+    const devPath = join(process.cwd(), 'build', 'icon.png')
+    return existsSync(devPath) ? devPath : undefined
+  }
+  const packagedPath = join(process.resourcesPath, 'icon.png')
+  return existsSync(packagedPath) ? packagedPath : undefined
+}
+
 function createWindow(): BrowserWindow {
+  const iconPath = resolveWindowIconPath()
   const win = new BrowserWindow({
     width: 1750,
     height: 1000,
@@ -62,6 +73,7 @@ function createWindow(): BrowserWindow {
     minHeight: 700,
     show: false,
     autoHideMenuBar: true,
+    ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {
       preload: resolvePreloadScript(),
       contextIsolation: true,

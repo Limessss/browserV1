@@ -1,20 +1,10 @@
 /**
  * 对齐 browser.Manager.ValidateCorePath：校验内核目录或可执行路径。
+ * 与 resolveChromeExecutableForProfile 一致：绝对路径原样；chrome/ 相对路径优先 userData/chrome。
  */
 import { existsSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { findCoreExecutable, formatCandidateHint } from './core-binary'
-
-function resolveCoreBaseDir(corePath: string): string {
-  const p = corePath.trim()
-  if (!p) {
-    return ''
-  }
-  if (resolve(p) === p || /^[a-zA-Z]:[\\/]/.test(p)) {
-    return p
-  }
-  return resolve(process.cwd(), p)
-}
+import { resolveCoreStoredPath } from './electron-paths'
 
 export function validateCorePath(corePath: string): { valid: boolean; message: string } {
   const trimmed = corePath.trim()
@@ -22,7 +12,7 @@ export function validateCorePath(corePath: string): { valid: boolean; message: s
     return { valid: false, message: '路径不能为空' }
   }
 
-  const baseDir = resolveCoreBaseDir(trimmed)
+  const baseDir = resolveCoreStoredPath(trimmed)
 
   try {
     if (!existsSync(baseDir)) {

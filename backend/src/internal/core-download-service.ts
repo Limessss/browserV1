@@ -29,7 +29,7 @@ import { listCores } from './browser-data'
 import { coreExecutableCandidates } from './core-binary'
 import { validateCorePath } from './core-validate'
 import { browserCoreSave } from './core-writes'
-import { resolveAppRelativePath } from './electron-paths'
+import { getUserDataRoot } from './apppath'
 import { normalizeProxyForChrome } from './proxy'
 import { emitWailsEvent } from '../ipc/wails-emit'
 
@@ -420,7 +420,8 @@ export function startBrowserCoreDownload(
         return
       }
 
-      const chromeDir = resolveAppRelativePath('chrome')
+      /** 内核落在 userData/chrome，避免重装安装目录时被清空 */
+      const chromeDir = join(getUserDataRoot(), 'chrome')
       mkdirSync(chromeDir, { recursive: true })
 
       const targetDir = join(chromeDir, coreName)
@@ -462,8 +463,8 @@ export function startBrowserCoreDownload(
         }
       }
 
-      const corePathRel = join('chrome', coreName)
-      const v = validateCorePath(corePathRel)
+      const corePathAbs = resolve(targetDir)
+      const v = validateCorePath(corePathAbs)
       if (!v.valid) {
         try {
           rmSync(targetDir, { recursive: true, force: true })
@@ -483,7 +484,7 @@ export function startBrowserCoreDownload(
       browserCoreSave(db, {
         coreId: randomUUID(),
         coreName,
-        corePath: corePathRel,
+        corePath: corePathAbs,
         isDefault: cores.length === 0,
       })
 

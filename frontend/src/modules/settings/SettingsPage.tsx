@@ -292,7 +292,7 @@ export function SettingsPage() {
     setImportProgress({
       phase: 'starting',
       progress: 0,
-      message: resetFirst ? '等待选择 ZIP 配置（先初始化后加载）...' : '等待选择 ZIP 配置（判重合并）...',
+      message: resetFirst ? '等待选择全量备份 ZIP（覆盖导入）...' : '等待选择全量备份 ZIP（合并导入）...',
     })
     try {
       const res = await importSystemConfig(resetFirst)
@@ -309,17 +309,24 @@ export function SettingsPage() {
       const failedComponents = Array.isArray(res.failedComponents) ? res.failedComponents : []
 
       if (res.partial || componentFailed > 0) {
+        if (failedComponents.length > 0) {
+          console.warn('[BackupImport] failedComponents（含 SQLite 等完整错误信息）:', failedComponents)
+        }
         const moduleNames = failedComponents
           .map(item => (item?.componentName || item?.componentId || '').trim())
           .filter(Boolean)
         const moduleHint = moduleNames.length > 0
           ? `：${moduleNames.slice(0, 3).join('、')}${moduleNames.length > 3 ? ` 等 ${moduleNames.length} 个模块` : ''}`
           : ''
+        const firstErr = failedComponents.find(c => String(c?.error ?? '').trim())?.error
+        const errTail = firstErr
+          ? `。首条原因：${String(firstErr).slice(0, 200)}${String(firstErr).length > 200 ? '…' : ''}`
+          : ''
         if (componentTotal > 0) {
           const componentSuccess = Math.max(0, componentTotal - componentFailed)
-          toast.warning(`加载完成（部分成功）：模块成功 ${componentSuccess}/${componentTotal}，异常 ${componentFailed}${moduleHint}`)
+          toast.warning(`加载完成（部分成功）：模块成功 ${componentSuccess}/${componentTotal}，异常 ${componentFailed}${moduleHint}${errTail}`)
         } else {
-          toast.warning(`加载完成（部分成功）：异常模块 ${componentFailed}${moduleHint}`)
+          toast.warning(`加载完成（部分成功）：异常模块 ${componentFailed}${moduleHint}${errTail}`)
         }
       } else {
         toast.success(`加载完成：导入 ${imported}，跳过 ${skipped}，冲突 ${conflicts}`)
@@ -536,10 +543,10 @@ export function SettingsPage() {
         </div>
       </Card>
 
-      <Card title="配置备份与恢复" subtitle="初始化、导出、加载全量配置与浏览器数据">
+      <Card title="全量备份与恢复（单 ZIP）" subtitle="一个 ZIP 内含主配置、SQLite、所有实例的浏览器用户目录及可选内核；换机后「覆盖导入」即可开箱即用">
         <div className="space-y-3">
           <p className="text-xs text-[var(--color-text-muted)]">
-            加载配置时可选择先初始化后全量恢复，或在现有数据上按规则判重合并。
+            导出得到单个 ZIP。导入时可选：先清空当前环境再全量覆盖（推荐迁机），或在现有数据上按规则判重合并。
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -558,7 +565,7 @@ export function SettingsPage() {
               loading={actionLoading === 'export'}
             >
               <Download className="w-4 h-4" />
-              导出配置
+              导出全量备份
             </Button>
             <Button
               size="sm"
@@ -568,7 +575,7 @@ export function SettingsPage() {
               }}
             >
               <Upload className="w-4 h-4" />
-              加载配置
+              导入全量备份
             </Button>
           </div>
           {exportProgress && (
@@ -627,7 +634,7 @@ export function SettingsPage() {
           setImportModalOpen(false)
           setImportProgress(null)
         }}
-        title="加载配置"
+        title="导入全量备份"
         width="520px"
         closable={!importRunning}
         footer={
@@ -649,22 +656,22 @@ export function SettingsPage() {
               loading={actionLoading === 'import-reset'}
               disabled={actionLoading !== 'none' && actionLoading !== 'import-reset'}
             >
-              是，先初始化后加载
+              是，清空后覆盖导入
             </Button>
             <Button
               onClick={() => handleImportSystem(false)}
               loading={actionLoading === 'import-merge'}
               disabled={actionLoading !== 'none' && actionLoading !== 'import-merge'}
             >
-              否，直接加载并判重
+              否，合并导入
             </Button>
           </>
         }
       >
         <div className="space-y-3 text-sm text-[var(--color-text-secondary)]">
-          <p>是否先执行初始化再加载 ZIP 配置？</p>
+          <p>是否先清空当前环境再导入？（换机、开箱即用请选「是」）</p>
           <p className="text-xs text-[var(--color-text-muted)]">
-            选择“是”会先清空当前数据，再全量恢复；选择“否”会在现有数据上做判重合并。
+            选「是」：初始化后按备份包全量覆盖（实例、Cookie/Profile、代理与内核路径等均与备份一致）。选「否」：在现有数据上判重合并，适合增量叠加。
           </p>
           {importProgress && (
             <div className="rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] px-3 py-2 space-y-2">

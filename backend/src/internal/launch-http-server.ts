@@ -432,24 +432,7 @@ function handlePlaywrightScriptKill(res: ServerResponse, runId: string): void {
   writeJson(res, 200, { ok: true, runId: id })
 }
 
-export async function startLaunchHttpServer(): Promise<number | null> {
-  if (httpServer) {
-    return httpListenPort
-  }
-
-  const preferred = loadLaunchServerConfig().preferredPort
-
-  const handler = (req: IncomingMessage, res: ServerResponse): void => {
-    const run = (): void => {
-      void handleLaunchHttpRequest(req, res)
-    }
-    localhostOnly(req, res, () => {
-      apiAuthWrap(req, res, run)
-    })
-  }
-
-  const server = http.createServer(handler)
-
+function attachLaunchUpgradeHandler(server: http.Server): void {
   server.on('upgrade', (req, socket: Socket, head) => {
     const host = remoteIp(socket.remoteAddress ?? '')
     if (host !== '127.0.0.1' && host !== '::1') {
@@ -473,38 +456,81 @@ export async function startLaunchHttpServer(): Promise<number | null> {
       socket.destroy()
     }
   })
+}
 
-  const tryListenOnce = async (port: number): Promise<boolean> =>
-    await new Promise<boolean>((resolve) => {
-      const onError = (err: unknown) => {
-        server.off('listening', onListening)
-        const e = err as NodeJS.ErrnoException
-        if (e?.code !== 'EADDRINUSE') {
-          console.error('[LaunchServer] 启动失败:', err)
-        }
-        resolve(false)
+async function tryListenOnServer(server: http.Server, port: number): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    const onError = (err: unknown) => {
+      cleanup()
+      const e = err as NodeJS.ErrnoException
+      if (e?.code !== 'EADDRINUSE') {
+        console.error('[LaunchServer] 启动失败:', err)
       }
-      const onListening = () => {
-        server.off('error', onError)
-        resolve(true)
-      }
-      server.once('error', onError)
-      server.once('listening', onListening)
-      server.listen(port > 0 ? port : 0, '127.0.0.1')
-    })
-
-  let ok = false
-  if (preferred > 0) {
-    ok = await tryListenOnce(preferred)
-    if (!ok) {
-      console.error(`[LaunchServer] 固定端口 ${preferred} 启动失败（可能被占用）`)
-      return null
+      resolve(false)
     }
-  } else {
-    ok = await tryListenOnce(0)
+    const onListening = () => {
+      cleanup()
+      resolve(true)
+    }
+    const cleanup = () => {
+      server.off('error', onError)
+      server.off('listening', onListening)
+    }
+    server.once('error', onError)
+    server.once('listening', onListening)
+    try {
+      server.listen(port > 0 ? port : 0, '127.0.0.1')
+    } catch (err) {
+      cleanup()
+      console.error('[LaunchServer] listen() 异常:', err)
+      resolve(false)
+    }
+  })
+}
+
+async function disposeUnusedServer(server: http.Server): Promise<void> {
+  await new Promise<void>((resolve) => {
+    server.close(() => resolve())
+  }).catch(() => undefined)
+}
+
+export async function startLaunchHttpServer(): Promise<number | null> {
+  if (httpServer) {
+    return httpListenPort
+  }
+
+  const preferred = loadLaunchServerConfig().preferredPort
+
+  const handler = (req: IncomingMessage, res: ServerResponse): void => {
+    const run = (): void => {
+      void handleLaunchHttpRequest(req, res)
+    }
+    localhostOnly(req, res, () => {
+      apiAuthWrap(req, res, run)
+    })
+  }
+
+  const createServerWithHandlers = (): http.Server => {
+    const s = http.createServer(handler)
+    attachLaunchUpgradeHandler(s)
+    return s
+  }
+
+  let server = createServerWithHandlers()
+  const firstPort = preferred > 0 ? preferred : 0
+  let ok = await tryListenOnServer(server, firstPort)
+
+  if (!ok && preferred > 0) {
+    console.warn(
+      `[LaunchServer] 首选端口 ${preferred} 不可用（常被其它 NexBrowser/进程占用），已改用系统分配端口`,
+    )
+    await disposeUnusedServer(server)
+    server = createServerWithHandlers()
+    ok = await tryListenOnServer(server, 0)
   }
 
   if (!ok) {
+    await disposeUnusedServer(server)
     return null
   }
 
@@ -514,7 +540,11 @@ export async function startLaunchHttpServer(): Promise<number | null> {
 
   httpServer = server
   httpListenPort = port
-  console.info('[LaunchServer] 监听', `http://127.0.0.1:${port}`)
+  if (preferred > 0 && port !== preferred) {
+    console.info('[LaunchServer] 监听', `http://127.0.0.1:${port}`, `（配置首选 ${preferred}）`)
+  } else {
+    console.info('[LaunchServer] 监听', `http://127.0.0.1:${port}`)
+  }
 
   return port
 }

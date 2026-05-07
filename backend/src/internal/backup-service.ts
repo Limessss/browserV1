@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 对齐 Ant-Browser app_backup.go + app_backup_ops.go：配置包导出/导入/初始化，事件 backup:export:progress、backup:import:progress。
  */
 import { createRequire } from 'node:module'
@@ -44,6 +44,7 @@ import { listRunningProfileIds } from './browser-runtime-store'
 import { stopLaunchHttpServer, startLaunchHttpServer } from './launch-http-server'
 import { stopAllProxyBridges } from './proxy-bridge-service'
 import { emitWailsEvent } from '../ipc/wails-emit'
+import { runMergeDatabase } from './backup-merge-database'
 
 const require = createRequire(import.meta.url)
 const AdmZip = require('adm-zip') as new (data?: string) => {
@@ -268,9 +269,9 @@ export async function backupExportPackage(): Promise<Record<string, unknown>> {
   }
   emitExport('starting', 0, '等待选择导出路径...')
 
-  const defaultName = `ant-chrome-backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19).replace('T', '-')}.zip`
+  const defaultName = `nexbrowser-full-backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19).replace('T', '-')}.zip`
   const { canceled, filePath } = await dialog.showSaveDialog({
-    title: '导出配置',
+    title: '导出全量备份（单 ZIP）',
     defaultPath: defaultName,
     filters: [{ name: 'ZIP 文件', extensions: ['zip'] }],
   })
@@ -407,140 +408,6 @@ function findDatabaseInPayload(payloadDir: string): string {
     }
   }
   return ''
-}
-
-function runMergeDatabase(
-  srcDBPath: string,
-  resetFirst: boolean,
-  stats: MergeStats,
-): void {
-  const db = getSqlite()
-  if (!db) {
-    throw new Error('数据库未初始化')
-  }
-  const ap = (p: string) => p.replace(/'/g, "''")
-  const attachPath = srcDBPath.split(sep).join('/')
-  db.run(`ATTACH DATABASE '${ap(attachPath)}' AS src`)
-
-  const tableDefs: { name: string; insertAll: string; insertSafe: string }[] = [
-    {
-      name: 'browser_groups',
-      insertAll: `INSERT INTO browser_groups (group_id, group_name, parent_id, sort_order, created_at, updated_at)
-SELECT group_id, group_name, parent_id, sort_order, created_at, updated_at FROM src.browser_groups`,
-      insertSafe: `INSERT INTO browser_groups (group_id, group_name, parent_id, sort_order, created_at, updated_at)
-SELECT s.group_id, s.group_name, s.parent_id, s.sort_order, s.created_at, s.updated_at
-FROM src.browser_groups s
-WHERE NOT EXISTS (
-  SELECT 1 FROM browser_groups t
-  WHERE t.group_id = s.group_id OR (t.parent_id = s.parent_id AND lower(t.group_name) = lower(s.group_name))
-)`,
-    },
-    {
-      name: 'browser_cores',
-      insertAll: `INSERT INTO browser_cores (core_id, core_name, core_path, is_default, sort_order, created_at)
-SELECT core_id, core_name, core_path, is_default, sort_order, created_at FROM src.browser_cores`,
-      insertSafe: `INSERT INTO browser_cores (core_id, core_name, core_path, is_default, sort_order, created_at)
-SELECT s.core_id, s.core_name, s.core_path, s.is_default, s.sort_order, s.created_at
-FROM src.browser_cores s
-WHERE NOT EXISTS (
-  SELECT 1 FROM browser_cores t
-  WHERE t.core_id = s.core_id OR lower(t.core_path) = lower(s.core_path)
-)`,
-    },
-    {
-      name: 'browser_proxies',
-      insertAll: `INSERT INTO browser_proxies (proxy_id, proxy_name, proxy_config, dns_servers, group_name, source_id, source_url, source_name_prefix, source_auto_refresh, source_refresh_interval_m, source_last_refresh_at, last_latency_ms, last_test_ok, last_tested_at, last_ip_health_json, sort_order, created_at)
-SELECT proxy_id, proxy_name, proxy_config, dns_servers, COALESCE(group_name,''), COALESCE(source_id,''), COALESCE(source_url,''), COALESCE(source_name_prefix,''), COALESCE(source_auto_refresh,0), COALESCE(source_refresh_interval_m,0), COALESCE(source_last_refresh_at,''), COALESCE(last_latency_ms,-1), COALESCE(last_test_ok,0), COALESCE(last_tested_at,''), COALESCE(last_ip_health_json,''), sort_order, created_at
-FROM src.browser_proxies`,
-      insertSafe: `INSERT INTO browser_proxies (proxy_id, proxy_name, proxy_config, dns_servers, group_name, source_id, source_url, source_name_prefix, source_auto_refresh, source_refresh_interval_m, source_last_refresh_at, last_latency_ms, last_test_ok, last_tested_at, last_ip_health_json, sort_order, created_at)
-SELECT s.proxy_id, s.proxy_name, s.proxy_config, s.dns_servers, COALESCE(s.group_name,''), COALESCE(s.source_id,''), COALESCE(s.source_url,''), COALESCE(s.source_name_prefix,''), COALESCE(s.source_auto_refresh,0), COALESCE(s.source_refresh_interval_m,0), COALESCE(s.source_last_refresh_at,''), COALESCE(s.last_latency_ms,-1), COALESCE(s.last_test_ok,0), COALESCE(s.last_tested_at,''), COALESCE(s.last_ip_health_json,''), s.sort_order, s.created_at
-FROM src.browser_proxies s
-WHERE NOT EXISTS (
-  SELECT 1 FROM browser_proxies t
-  WHERE t.proxy_id = s.proxy_id OR lower(t.proxy_config) = lower(s.proxy_config)
-)`,
-    },
-    {
-      name: 'browser_profiles',
-      insertAll: `INSERT INTO browser_profiles (profile_id, profile_name, user_data_dir, core_id, fingerprint_args, proxy_id, proxy_config, launch_args, tags, keywords, group_id, default_start_urls, created_at, updated_at)
-SELECT profile_id, profile_name, user_data_dir, core_id, fingerprint_args, proxy_id, proxy_config, launch_args, tags, keywords, COALESCE(group_id,''), COALESCE(default_start_urls,'[]'), created_at, updated_at
-FROM src.browser_profiles`,
-      insertSafe: `INSERT INTO browser_profiles (profile_id, profile_name, user_data_dir, core_id, fingerprint_args, proxy_id, proxy_config, launch_args, tags, keywords, group_id, default_start_urls, created_at, updated_at)
-SELECT s.profile_id, s.profile_name, s.user_data_dir, s.core_id, s.fingerprint_args, s.proxy_id, s.proxy_config, s.launch_args, s.tags, s.keywords, COALESCE(s.group_id,''), COALESCE(s.default_start_urls,'[]'), s.created_at, s.updated_at
-FROM src.browser_profiles s
-WHERE NOT EXISTS (
-  SELECT 1 FROM browser_profiles t
-  WHERE t.profile_id = s.profile_id OR lower(t.user_data_dir) = lower(s.user_data_dir)
-)`,
-    },
-    {
-      name: 'browser_bookmarks',
-      insertAll: `INSERT INTO browser_bookmarks (name, url, sort_order)
-SELECT name, url, sort_order FROM src.browser_bookmarks`,
-      insertSafe: `INSERT INTO browser_bookmarks (name, url, sort_order)
-SELECT s.name, s.url, s.sort_order
-FROM src.browser_bookmarks s
-WHERE NOT EXISTS (
-  SELECT 1 FROM browser_bookmarks t WHERE lower(t.url) = lower(s.url)
-)`,
-    },
-    {
-      name: 'launch_codes',
-      insertAll: `INSERT INTO launch_codes (profile_id, code, created_at, updated_at)
-SELECT profile_id, code, created_at, updated_at FROM src.launch_codes`,
-      insertSafe: `INSERT INTO launch_codes (profile_id, code, created_at, updated_at)
-SELECT s.profile_id, s.code, s.created_at, s.updated_at
-FROM src.launch_codes s
-WHERE NOT EXISTS (
-  SELECT 1 FROM launch_codes t
-  WHERE t.profile_id = s.profile_id OR t.code = s.code
-)`,
-    },
-  ]
-
-  for (const item of tableDefs) {
-    try {
-      const chk = db.exec(`SELECT name FROM src.sqlite_master WHERE type='table' AND name='${ap(item.name)}'`)
-      if (!chk.length || !chk[0].values.length) {
-        continue
-      }
-    } catch {
-      continue
-    }
-    const countRows = (alias: string): number => {
-      const r = db.exec(`SELECT COUNT(*) as c FROM ${alias}.${ap(item.name)}`)
-      if (!r[0]?.values?.[0]) return 0
-      return Number(r[0].values[0][0] ?? 0) || 0
-    }
-    const total = countRows('src')
-    if (total === 0) continue
-    const beforeTarget = countRows('main')
-    const sqlText = resetFirst ? item.insertAll : item.insertSafe
-    try {
-      db.run(sqlText)
-    } catch (e) {
-      try {
-        db.run(`DETACH DATABASE src`)
-      } catch {
-        /* ignore */
-      }
-      throw new Error(`导入数据表失败(${item.name}): ${e instanceof Error ? e.message : e}`)
-    }
-    const afterTarget = countRows('main')
-    const inserted = Math.max(0, afterTarget - beforeTarget)
-    const skipped = Math.max(0, total - inserted)
-    stats.imported += inserted
-    if (!resetFirst) {
-      stats.skipped += skipped
-    }
-  }
-
-  try {
-    db.run('DETACH DATABASE src')
-  } catch {
-    /* ignore */
-  }
-  persistSqlite()
 }
 
 function removeDirContentsExcept(dir: string, keep: Set<string>): void {
@@ -1079,9 +946,9 @@ function backupImportFromPath(
 export async function backupImportPackage(
   resetFirst: boolean,
 ): Promise<Record<string, unknown>> {
-  emitImport('starting', 0, '等待选择 ZIP 配置文件...')
+  emitImport('starting', 0, '等待选择全量备份 ZIP...')
   const { canceled, filePaths } = await dialog.showOpenDialog({
-    title: '加载配置',
+    title: '导入全量备份（单 ZIP）',
     properties: ['openFile'],
     filters: [{ name: 'ZIP 文件', extensions: ['zip'] }],
   })

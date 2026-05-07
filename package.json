@@ -14,9 +14,10 @@
     "lint": "tsc --noEmit -p backend/tsconfig.json && tsc --noEmit -p frontend/tsconfig.json",
     "smoke:runtime": "node scripts/smoke-runtime-check.mjs",
     "fetch:xray:win": "node scripts/fetch-xray-windows.mjs",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && npm run fetch:xray:win && electron-builder --win",
-    "dist:win:installer": "npm run build && npm run fetch:xray:win && electron-builder --win --x64 -c.win.target=nsis"
+    "icons": "node scripts/generate-icons.mjs",
+    "dist": "npm run build && npm run icons && electron-builder",
+    "dist:win": "npm run build && npm run icons && npm run fetch:xray:win && electron-builder --win",
+    "dist:win:installer": "npm run build && npm run icons && npm run fetch:xray:win && electron-builder --win --x64 -c.win.target=nsis"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",
@@ -57,7 +58,10 @@
     "electron-builder": "^26.8.1",
     "electron-vite": "^3.1.0",
     "postcss": "^8.5.3",
+    "rcedit": "^5.0.2",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.17",
+    "to-ico": "^1.1.5",
     "typescript": "^5.7.3",
     "vite": "^6.2.3"
   },
@@ -67,10 +71,13 @@
   "build": {
     "appId": "com.nexbrowser.desktop",
     "productName": "NexBrowser",
+    "icon": "build/icon.png",
     "copyright": "Copyright © 2026",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
+    "afterSign": "./scripts/electron-after-sign.mjs",
     "files": [
       "dist-electron/**/*",
       "package.json"
@@ -79,6 +86,12 @@
     "asarUnpack": [
       "**/*.node",
       "**/*.wasm"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "."
+      }
     ],
     "extraFiles": [
       {
@@ -111,7 +124,7 @@
       }
     ],
     "win": {
-      "signAndEditExecutable": false,
+      "icon": "icon.ico",
       "target": [
         {
           "target": "zip",
@@ -132,7 +145,9 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     }
   }
 }
