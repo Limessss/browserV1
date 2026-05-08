@@ -203,11 +203,10 @@ export function buildBackupScope(
     id: 'system_config_main',
     category: 'system_config',
     entryType: 'file',
-    required: true,
+    required: false,
     sourcePath: join(appRootAbs, 'config.yaml'),
     archivePath: 'payload/system/config.yaml',
-    exists: true,
-    description: '主配置文件',
+    description: '主配置文件（存在时导出；未生成过 config.yaml 时跳过）',
   })
 
   builder.add({
