@@ -2,7 +2,8 @@
 
 /**
  * TikTok Shop：Compass 单品卡 → 页面**默认日期**（不改动日期筛选）→ 按「曝光」降序取 Top N（默认 10）→
- * 随机从中抽取 M 个商品（默认 5）→ 带货视频 material-2-video：**AI 视频生成器 → 选品 → 生成视频**（每个商品各跑一轮）。
+ * 随机打乱 Top N 列表后依次尝试 → 带货视频 material-2-video：**AI 视频生成器 → 选品 → 生成视频**；
+ * 直至累计 **M 次成功**（默认 5）：选品失败（搜不到/勾不中）或生成异常的商品**跳过并从池中多试下一个**，不计入 M。
  *
  * 成对文档：`mcp_tiktok_compass_top10_random5_ai_video.md`；约定见 `../README.md`。
  *
@@ -10,6 +11,11 @@
  *   node playwright_scripts/tiktok_compass_top10_random5_ai_video/tiktok_compass_top10_random5_ai_video.mjs --useLaunchApi --code ICHPPH --shop_region PH
  *   node ... --cdp http://127.0.0.1:19876 --shop_region PH
  *   node ... --useLaunchApi --code ICHPPH --shop_region PH --top_n 10 --pick_n 5
+ *
+ * 页面内会在底部显示「[脚本] …」短时 Toast（约 3 秒，`pointer-events: none`，尽量不挡操作）。
+ * 任务结束时会居中弹出带「确定」的结果 Modal（需点击后脚本才结束等待并关闭浏览器，除非 `--keepOpen`）。
+ *
+ * 导航仅等 `domcontentloaded`，不等 `networkidle`；各步骤在**对应可操作元素可见后再等待约 1 秒**执行动作。
  */
 
 import { chromium } from 'playwright'
@@ -45,6 +51,15 @@ const DEBUG_READY_INTERVAL_MS = 500
 const EXPOSURE_HEADER_RE =
   /曝光(用户|人数|量)?|Product\s*impressions|Impressions|曝光用户|Exposures?/i
 
+/** 需要操作的元素变为可见后，再等待此时长（毫秒）再执行点击/排序等操作 */
+const READY_AFTER_VISIBLE_MS = 1000
+
+/** AI 额度文案：连续多少次解析结果一致才视为稳定（避免短暂 0/5 闪烁误判） */
+const AI_QUOTA_STABLE_NEED = 3
+/** AI 额度轮询间隔、最大轮数（约 12s 上限） */
+const AI_QUOTA_POLL_INTERVAL_MS = 250
+const AI_QUOTA_MAX_POLLS = 48
+
 /**
  * @param {string} a
  * @param {string} b
@@ -78,9 +93,9 @@ async function gotoSellerPageRespectingShopRegion(page, pageUrl, expectedRegion)
   const want = String(expectedRegion || '').trim()
   const steps = []
 
+  /** 仅等待 DOM，不等待 networkidle（卖家中心常驻请求会导致长时间阻塞）。后续由各流程等待可操作元素。 */
   const nav = async (url, label) => {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-    await page.waitForLoadState('networkidle', { timeout: 45_000 }).catch(() => {})
     steps.push(label)
   }
 
@@ -91,7 +106,6 @@ async function gotoSellerPageRespectingShopRegion(page, pageUrl, expectedRegion)
   }
 
   await nav(pageUrl, 'goto-initial')
-  await sleep(600)
 
   let urlParam = await readUrlShopRegionParam(page)
   if (regionCodeEq(urlParam, want)) {
@@ -120,9 +134,7 @@ async function gotoSellerPageRespectingShopRegion(page, pageUrl, expectedRegion)
     window.location.replace(u)
   }, pageUrl)
   await page.waitForLoadState('domcontentloaded', { timeout: 120_000 })
-  await page.waitForLoadState('networkidle', { timeout: 45_000 }).catch(() => {})
   steps.push('location-replace')
-  await sleep(800)
   urlParam = await readUrlShopRegionParam(page)
 
   if (!regionCodeEq(urlParam, want)) {
@@ -130,13 +142,11 @@ async function gotoSellerPageRespectingShopRegion(page, pageUrl, expectedRegion)
     bust.searchParams.set('shop_region', want)
     bust.searchParams.set('_nc', String(Date.now()))
     await nav(bust.toString(), 'goto-cache-bust')
-    await sleep(600)
   }
 
   urlParam = await readUrlShopRegionParam(page)
   if (!regionCodeEq(urlParam, want)) {
     await nav(pageUrl, 'goto-retry-same')
-    await sleep(600)
     urlParam = await readUrlShopRegionParam(page)
   }
 
@@ -184,6 +194,263 @@ function buildHeaders() {
 
 async function sleep(ms) {
   await new Promise((r) => setTimeout(r, ms))
+}
+
+/** 页面底部 Toast 展示时长（毫秒） */
+const PAGE_TOAST_MS = 3000
+const PAGE_TOAST_DOM_ID = 'ant-playwright-top-toast'
+const PAGE_MODAL_ROOT_ID = 'ant-playwright-result-modal'
+
+/**
+ * 在页面底部显示短时提示，默认 3 秒后移除；`pointer-events: none` 尽量不挡点击。
+ * @param {import('playwright').Page} page
+ * @param {string} message
+ */
+async function showPageToast(page, message) {
+  const msg = String(message || '').slice(0, 600)
+  try {
+    await page.evaluate(
+      ({ text, ms, rootId }) => {
+        const prev = document.getElementById(rootId)
+        if (prev) prev.remove()
+
+        const sid = 'ant-playwright-toast-styles'
+        if (!document.getElementById(sid)) {
+          const st = document.createElement('style')
+          st.id = sid
+          st.textContent = `
+@keyframes ant-pw-toast-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ant-pw-toast-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(10px); }
+}
+`
+          document.head.appendChild(st)
+        }
+
+        const root = document.createElement('div')
+        root.id = rootId
+        root.setAttribute('data-ant-playwright-toast', '1')
+        root.style.cssText = [
+          'position:fixed',
+          'bottom:0',
+          'left:0',
+          'right:0',
+          'z-index:2147483646',
+          'pointer-events:none',
+          'display:flex',
+          'justify-content:center',
+          'align-items:flex-end',
+          'padding:0 14px 12px',
+          'box-sizing:border-box',
+          'font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+          'font-size:13px',
+          'line-height:1.5',
+        ].join(';')
+
+        const row = document.createElement('div')
+        row.style.cssText = [
+          'max-width:min(560px,92vw)',
+          'display:flex',
+          'align-items:stretch',
+          'border-radius:14px 14px 0 0',
+          'overflow:hidden',
+          'box-shadow:0 -10px 36px rgba(0,0,0,.42),0 0 0 1px rgba(255,255,255,.07)',
+          'animation:ant-pw-toast-in 0.38s cubic-bezier(.22,1,.36,1) both',
+        ].join(';')
+
+        const stripe = document.createElement('div')
+        stripe.style.cssText =
+          'width:5px;flex-shrink:0;background:linear-gradient(180deg,#2dd4bf,#6366f1);'
+
+        const bar = document.createElement('div')
+        bar.style.cssText = [
+          'flex:1',
+          'background:linear-gradient(145deg,rgba(32,32,40,.98) 0%,rgba(20,20,26,.99) 100%)',
+          'color:#f4f4f8',
+          'padding:12px 18px',
+          'text-align:center',
+          'word-break:break-word',
+          'font-weight:500',
+          'letter-spacing:.02em',
+        ].join(';')
+        bar.textContent = text
+
+        row.appendChild(stripe)
+        row.appendChild(bar)
+        root.appendChild(row)
+        document.body.appendChild(root)
+
+        window.setTimeout(() => {
+          row.style.animation = 'ant-pw-toast-out 0.28s ease forwards'
+          window.setTimeout(() => root.remove(), 280)
+        }, ms)
+      },
+      { text: msg, ms: PAGE_TOAST_MS, rootId: PAGE_TOAST_DOM_ID },
+    )
+  } catch {
+    /* 导航中或未就绪时忽略 */
+  }
+}
+
+/**
+ * 任务结束时居中 Modal，展示摘要；需用户点击「确定」后关闭（脚本会等待该点击）。
+ * @param {import('playwright').Page} page
+ * @param {{ title: string, variant?: 'success' | 'warning' | 'danger', lines: string[] }} opts
+ */
+async function showPageResultModalUntilAck(page, opts) {
+  const title = String(opts.title || '任务结束').slice(0, 200)
+  const variant = opts.variant === 'danger' || opts.variant === 'warning' ? opts.variant : 'success'
+  const lines = (opts.lines || []).map((s) => String(s).slice(0, 2000))
+
+  await page.evaluate(
+    ({ title: t, variant: v, lines: ln, rootId }) => {
+      const existing = document.getElementById(rootId)
+      if (existing) existing.remove()
+
+      const sid = 'ant-playwright-modal-styles'
+      if (!document.getElementById(sid)) {
+        const st = document.createElement('style')
+        st.id = sid
+        st.textContent = `
+@keyframes ant-pw-modal-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ant-pw-modal-panel-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+`
+        document.head.appendChild(st)
+      }
+
+      const grad =
+        v === 'success'
+          ? 'linear-gradient(135deg,#0d9488 0%,#6366f1 55%,#7c3aed 100%)'
+          : v === 'warning'
+            ? 'linear-gradient(135deg,#d97706 0%,#ea580c 100%)'
+            : 'linear-gradient(135deg,#dc2626 0%,#be185d 100%)'
+
+      const backdrop = document.createElement('div')
+      backdrop.id = rootId
+      backdrop.setAttribute('data-ant-playwright-result-modal', '1')
+      backdrop.style.cssText = [
+        'position:fixed',
+        'inset:0',
+        'z-index:2147483647',
+        'display:flex',
+        'align-items:center',
+        'justify-content:center',
+        'padding:24px 16px',
+        'box-sizing:border-box',
+        'background:rgba(12,12,18,.52)',
+        'backdrop-filter:saturate(1.2) blur(10px)',
+        '-webkit-backdrop-filter:saturate(1.2) blur(10px)',
+        'animation:ant-pw-modal-in 0.28s ease both',
+        'font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+      ].join(';')
+
+      const panel = document.createElement('div')
+      panel.style.cssText = [
+        'width:100%',
+        'max-width:440px',
+        'max-height:min(72vh,620px)',
+        'display:flex',
+        'flex-direction:column',
+        'border-radius:18px',
+        'overflow:hidden',
+        'box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.08)',
+        'animation:ant-pw-modal-panel-in 0.4s cubic-bezier(.22,1,.36,1) both',
+        'background:#14141a',
+      ].join(';')
+
+      const head = document.createElement('div')
+      head.style.cssText = [
+        'padding:22px 24px 18px',
+        'background:' + grad,
+        'color:#fff',
+      ].join(';')
+
+      const headTitle = document.createElement('div')
+      headTitle.style.cssText = 'font-size:18px;font-weight:700;letter-spacing:.03em;line-height:1.35;'
+      headTitle.textContent = t
+      head.appendChild(headTitle)
+
+      const sub = document.createElement('div')
+      sub.style.cssText = 'margin-top:6px;font-size:12px;opacity:.92;font-weight:500;'
+      sub.textContent = 'Playwright 脚本执行结果'
+      head.appendChild(sub)
+
+      const body = document.createElement('div')
+      body.style.cssText = [
+        'padding:18px 22px 12px',
+        'background:linear-gradient(180deg,#1a1a22 0%,#14141a 40%)',
+        'color:#e8e8ef',
+        'overflow:auto',
+        'flex:1',
+        'min-height:0',
+      ].join(';')
+
+      const pre = document.createElement('pre')
+      pre.style.cssText = [
+        'margin:0',
+        'white-space:pre-wrap',
+        'word-break:break-word',
+        'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace',
+        'font-size:12.5px',
+        'line-height:1.65',
+        'color:#d4d4dc',
+      ].join(';')
+      pre.textContent = ln.length ? ln.join('\n') : '（无详情）'
+
+      body.appendChild(pre)
+
+      const foot = document.createElement('div')
+      foot.style.cssText =
+        'padding:14px 22px 20px;background:#14141a;border-top:1px solid rgba(255,255,255,.06);'
+
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.setAttribute('data-ant-playwright-modal-ok', '1')
+      btn.textContent = '确定'
+      btn.style.cssText = [
+        'width:100%',
+        'padding:12px 16px',
+        'border:none',
+        'border-radius:12px',
+        'cursor:pointer',
+        'font-size:15px',
+        'font-weight:600',
+        'letter-spacing:.08em',
+        'color:#fff',
+        'background:linear-gradient(135deg,#6366f1,#7c3aed)',
+        'box-shadow:0 8px 24px rgba(99,102,241,.35)',
+        'transition:transform .15s ease,filter .15s ease',
+      ].join(';')
+      btn.onmouseenter = () => {
+        btn.style.filter = 'brightness(1.06)'
+      }
+      btn.onmouseleave = () => {
+        btn.style.filter = 'none'
+      }
+      btn.onclick = () => backdrop.remove()
+
+      foot.appendChild(btn)
+      panel.appendChild(head)
+      panel.appendChild(body)
+      panel.appendChild(foot)
+      backdrop.appendChild(panel)
+      document.body.appendChild(backdrop)
+    },
+    { title, variant, lines, rootId: PAGE_MODAL_ROOT_ID },
+  )
+
+  /* 必须由真实用户点击「确定」关闭；勿用 Playwright .click()，否则会立刻触发按钮等同瞬间关闭 */
+  await page.locator(`#${PAGE_MODAL_ROOT_ID}`).waitFor({ state: 'detached', timeout: 0 })
 }
 
 async function requestJson(url, options = {}) {
@@ -286,6 +553,26 @@ async function connectBrowser({ headed, cdpUrl, launchEdge }) {
 }
 
 /**
+ * Compass / Arco Table：列头内可能出现 `svg.arco-icon-sort_descending` 表示当前为降序。
+ * @param {import('playwright').Locator} header
+ * @returns {Promise<string | null>} 检测到的策略名，未判定为降序则 null
+ */
+async function exposureColumnDescendingState(header) {
+  const aria = await header.getAttribute('aria-sort').catch(() => null)
+  if (aria === 'descending') return 'aria-sort-desc'
+  const cls = (await header.getAttribute('class')) || ''
+  if (/sort-desc|descend|down/i.test(cls)) return 'class-desc'
+  const arcoDesc = header.locator(
+    'svg.arco-icon-sort_descending, .arco-icon-sort_descending, [class*="arco-icon-sort_descending"]',
+  )
+  const cnt = await arcoDesc.count().catch(() => 0)
+  if (cnt > 0 && (await arcoDesc.first().isVisible().catch(() => false))) {
+    return 'arco-icon-sort-descending'
+  }
+  return null
+}
+
+/**
  * @param {import('playwright').Page} page
  */
 async function trySortByExposureUsersDescending(page) {
@@ -301,16 +588,17 @@ async function trySortByExposureUsersDescending(page) {
     const h = loc.first()
     if (!(await h.isVisible().catch(() => false))) continue
 
+    let state = await exposureColumnDescendingState(h)
+    if (state) {
+      return { ok: true, strategy: state, clicks: 0 }
+    }
+
     for (let click = 0; click < 4; click += 1) {
       await h.click({ timeout: 12_000 })
       await sleep(900)
-      const aria = await h.getAttribute('aria-sort').catch(() => null)
-      if (aria === 'descending') {
-        return { ok: true, strategy: 'aria-sort-desc', clicks: click + 1 }
-      }
-      const cls = (await h.getAttribute('class')) || ''
-      if (/sort-desc|descend|down/i.test(cls)) {
-        return { ok: true, strategy: 'class-desc', clicks: click + 1 }
+      state = await exposureColumnDescendingState(h)
+      if (state) {
+        return { ok: true, strategy: state, clicks: click + 1 }
       }
     }
     return { ok: true, strategy: 'header-clicks-fallback', clicks: 4 }
@@ -436,16 +724,16 @@ async function extractTopProductRows(page, n) {
  */
 async function runCompassTopProductsDefaultDate(page, opts) {
   const navMeta = await gotoSellerPageRespectingShopRegion(page, opts.pageUrl, opts.shopRegion)
-  await sleep(900)
+  await showPageToast(page, `[脚本] Compass 单品卡：页面已打开，正在读取表格…`)
 
-  await page
-    .locator('table, [role="grid"], tbody')
-    .first()
-    .waitFor({ state: 'visible', timeout: 90_000 })
-    .catch(() => {})
+  const tableArea = page.locator('table, [role="grid"], tbody').first()
+  await tableArea.waitFor({ state: 'visible', timeout: 90_000 }).catch(() => {})
+  await sleep(READY_AFTER_VISIBLE_MS)
 
   const sortMeta = await trySortByExposureUsersDescending(page)
-  await sleep(1000)
+
+  await page.locator('tbody tr').first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
+  await sleep(READY_AFTER_VISIBLE_MS)
 
   const rows = await extractTopProductRows(page, opts.topN)
 
@@ -461,6 +749,11 @@ async function runCompassTopProductsDefaultDate(page, opts) {
     rank: i + 1,
     ...r,
   }))
+
+  await showPageToast(
+    page,
+    `[脚本] Compass：已解析 ${ranked.length} 个商品（Top ${opts.topN} 范围内）`,
+  )
 
   return {
     ok: ranked.length > 0,
@@ -622,6 +915,103 @@ function locatorAiVideoGeneratorDialog(page) {
     .filter({ has: page.getByRole('button', { name: /生成视频/ }) })
 }
 
+/** AI 信用额度用尽时终止整次任务（主循环识别 `code`） */
+const AI_CREDIT_EXHAUSTED = 'AI_CREDIT_EXHAUSTED'
+
+/**
+ * 从文本中取所有「今日剩余 X/Y」，以**最后一次出现**为准（避免全文里先出现陈旧段导致误判）。
+ * @param {string} raw
+ * @returns {{ remaining: number, total: number } | null}
+ */
+function parseQuotaFromTextLast(raw) {
+  const re = /今日剩余\s*(\d+)\s*\/\s*(\d+)/g
+  const s = String(raw || '')
+  let m
+  let last = null
+  while ((m = re.exec(s)) !== null) {
+    last = { remaining: parseInt(m[1], 10), total: parseInt(m[2], 10) }
+  }
+  return last
+}
+
+/**
+ * 在当前 AI 视频生成器 dialog 内读取额度（优先 dialog 内 footer，否则整段 innerText）。
+ * @param {import('playwright').Locator} mainDialog
+ */
+async function sampleAiQuotaOnce(mainDialog) {
+  const footer = mainDialog
+    .locator('.drawer-footer-left-zGjQyz, [class*="drawer-footer-left"]')
+    .first()
+  if ((await footer.count().catch(() => 0)) > 0) {
+    if (await footer.isVisible().catch(() => false)) {
+      const t = await footer.innerText().catch(() => '')
+      const q = parseQuotaFromTextLast(t)
+      if (q) return q
+    }
+  }
+  const dialogText = await mainDialog.innerText().catch(() => '')
+  return parseQuotaFromTextLast(dialogText)
+}
+
+/**
+ * 打开 AI 视频生成器后检查页脚「今日剩余 X/Y 点 AI 信用额度」；剩余为 0 时抛错停止任务。
+ * 仅在当前 AI 对话框内取样；多轮解析至数值稳定后再判断，避免短暂 0/5 或错误首段文案。
+ * @param {import('playwright').Page} page
+ */
+async function assertAiVideoCreditRemaining(page) {
+  const mainDialog = locatorAiVideoGeneratorDialog(page)
+  await mainDialog.waitFor({ state: 'visible', timeout: 45_000 })
+
+  /** @type {{ remaining: number, total: number } | null} */
+  let quota = null
+  let stableKey = ''
+  let stableCount = 0
+
+  for (let poll = 0; poll < AI_QUOTA_MAX_POLLS; poll += 1) {
+    const q = await sampleAiQuotaOnce(mainDialog)
+    if (q) {
+      const key = `${q.remaining}/${q.total}`
+      if (key === stableKey) {
+        stableCount += 1
+      } else {
+        stableKey = key
+        stableCount = 1
+      }
+      quota = q
+      if (stableCount >= AI_QUOTA_STABLE_NEED) {
+        break
+      }
+    } else {
+      stableKey = ''
+      stableCount = 0
+    }
+    await sleep(AI_QUOTA_POLL_INTERVAL_MS)
+  }
+
+  if (!quota) {
+    const fallbackRaw = await page.evaluate(() => {
+      const el =
+        document.querySelector('.drawer-footer-left-zGjQyz') ||
+        document.querySelector('[class*="drawer-footer-left"]')
+      return el ? el.innerText : ''
+    })
+    quota = parseQuotaFromTextLast(fallbackRaw)
+  }
+
+  /* 仅当「剩余为 0」且已连续稳定采样足够次数时才终止，避免偶发 0 或未加载完误判 */
+  if (quota && quota.remaining === 0 && stableCount >= AI_QUOTA_STABLE_NEED) {
+    await showPageToast(
+      page,
+      `[脚本] AI 额度已用尽（今日剩余 ${quota.remaining}/${quota.total}），任务将停止`,
+    )
+    const err = new Error(
+      `${AI_CREDIT_EXHAUSTED}: 今日剩余 ${quota.remaining}/${quota.total} 点 AI 信用额度，停止任务`,
+    )
+    Object.assign(err, { code: AI_CREDIT_EXHAUSTED })
+    throw err
+  }
+}
+
 /**
  * @param {import('playwright').Page} page
  * @param {{ pageUrl: string, productId: string, shopRegion: string }} opts
@@ -629,23 +1019,35 @@ function locatorAiVideoGeneratorDialog(page) {
 async function runAiVideoFlow(page, opts) {
   const { pageUrl, productId, shopRegion } = opts
   await gotoSellerPageRespectingShopRegion(page, pageUrl, shopRegion)
-  await page
-    .getByRole('button', { name: /AI 视频生成器/ })
-    .waitFor({ state: 'visible', timeout: 90_000 })
+  await showPageToast(page, `[脚本] 带货视频页已打开 · 商品 ${productId}`)
 
-  await page.getByRole('button', { name: /AI 视频生成器/ }).click()
-  await page.getByRole('button', { name: '选择商品' }).click()
+  const aiVideoGenBtn = page.getByRole('button', { name: /AI 视频生成器/ })
+  await aiVideoGenBtn.waitFor({ state: 'visible', timeout: 90_000 })
+  await sleep(READY_AFTER_VISIBLE_MS)
+  await aiVideoGenBtn.click()
+  await showPageToast(page, `[脚本] 已打开 AI 视频生成器，正在检查额度…`)
+  await assertAiVideoCreditRemaining(page)
+  await showPageToast(page, `[脚本] 额度可用 · 正在选择商品 ${productId}`)
+
+  const pickProductBtn = page.getByRole('button', { name: '选择商品' })
+  await pickProductBtn.waitFor({ state: 'visible', timeout: 30_000 })
+  await sleep(READY_AFTER_VISIBLE_MS)
+  await pickProductBtn.click()
 
   const productDialog = locatorProductPickerDialog(page)
   await productDialog.waitFor({ state: 'visible', timeout: 30_000 })
+  await sleep(READY_AFTER_VISIBLE_MS)
   await selectProductRow(productDialog, productId)
   await productDialog.getByRole('button', { name: '确认' }).click()
 
   const mainDialog = locatorAiVideoGeneratorDialog(page)
-  await sleep(2000)
+  await mainDialog.waitFor({ state: 'visible', timeout: 45_000 })
+  await sleep(READY_AFTER_VISIBLE_MS)
+  await showPageToast(page, `[脚本] 已选品 · 正在点击生成视频`)
   await mainDialog.getByRole('button', { name: /生成视频/ }).click()
 
   await mainDialog.getByText('正在生成视频').waitFor({ timeout: 30_000 })
+  await showPageToast(page, `[脚本] 正在生成视频（商品 ${productId}）`)
   const hint = await mainDialog.textContent()
   return { ok: true, hint: (hint || '').slice(0, 500) }
 }
@@ -719,6 +1121,7 @@ async function run() {
     })
 
     if (!compass.ok || compass.products.length === 0) {
+      await showPageToast(page, `[脚本] Compass 阶段失败：未解析到可用商品，请查看终端输出`)
       console.log(
         JSON.stringify(
           { ok: false, phase: 'compass', compass },
@@ -727,62 +1130,170 @@ async function run() {
         ),
       )
       process.exitCode = 1
+      try {
+        await showPageResultModalUntilAck(page, {
+          title: 'Compass 阶段失败',
+          variant: 'danger',
+          lines: [
+            '阶段：Compass 单品卡',
+            `店铺区域：${flow.shopRegion}`,
+            `候选商品数：${compass.products.length}`,
+            ...(compass.hint ? [`说明：${compass.hint}`] : []),
+            '',
+            '终端已输出完整 JSON（phase: compass）。点击「确定」关闭。',
+          ],
+        })
+      } catch {
+        /* 页面不可用时仍可依赖终端输出 */
+      }
       return
     }
 
-    const pickedRows = pickRandomUnique(compass.products, flow.pickN)
-    const pickedProductIds = pickedRows.map((p) => p.product_id)
+    /** 随机打乱全部 Compass 候选，依次尝试直到累计 pick_n 次成功（失败则换下一个）。 */
+    const candidatePool = pickRandomUnique(compass.products, compass.products.length)
+
+    await showPageToast(
+      page,
+      `[脚本] 开始 AI 视频阶段：目标成功 ${flow.pickN} 次，候选 ${candidatePool.length} 个`,
+    )
 
     /** @type {Array<Record<string, unknown>>} */
-    const aiRuns = []
-    for (let i = 0; i < pickedRows.length; i += 1) {
-      const row = pickedRows[i]
+    const aiVideoRuns = []
+    /** @type {Array<Record<string, unknown>>} */
+    const aiVideoSkipped = []
+
+    /** @type {string | null} */
+    let stopReason = null
+
+    let ci = 0
+    while (aiVideoRuns.length < flow.pickN && ci < candidatePool.length) {
+      const row = candidatePool[ci]
+      ci += 1
       const productId = row.product_id
+      await showPageToast(
+        page,
+        `[脚本] 第 ${ci}/${candidatePool.length} 个候选 · 已成功 ${aiVideoRuns.length}/${flow.pickN} · ${productId}`,
+      )
       try {
         const r = await runAiVideoFlow(page, {
           pageUrl: flow.materialUrl,
           productId,
           shopRegion: flow.shopRegion,
         })
-        aiRuns.push({
-          index: i + 1,
+        aiVideoRuns.push({
+          index: aiVideoRuns.length + 1,
           productId,
           title: row.title,
           rankInCompass: row.rank,
+          imageUrl: row.imageUrl,
           ...r,
         })
       } catch (e) {
-        aiRuns.push({
-          index: i + 1,
-          productId,
+        const code =
+          e && typeof e === 'object' && 'code' in e ? String((/** @type {{ code?: unknown }} */ (e)).code) : ''
+        const msg = e instanceof Error ? e.message : String(e)
+        if (code === AI_CREDIT_EXHAUSTED || msg.includes(AI_CREDIT_EXHAUSTED)) {
+          stopReason = 'ai_credit_exhausted'
+          aiVideoSkipped.push({
+            product_id: productId,
+            title: row.title,
+            rank: row.rank,
+            imageUrl: row.imageUrl,
+            error: msg,
+          })
+          break
+        }
+        aiVideoSkipped.push({
+          product_id: productId,
           title: row.title,
-          rankInCompass: row.rank,
-          ok: false,
-          error: e instanceof Error ? e.message : String(e),
+          rank: row.rank,
+          imageUrl: row.imageUrl,
+          error: msg,
         })
       }
       await sleep(2000)
     }
 
-    const allAiOk = aiRuns.every((x) => x.ok !== false)
-    if (!allAiOk) process.exitCode = 1
+    const pickedProducts = aiVideoRuns.map((run) => ({
+      rank: run.rankInCompass,
+      product_id: run.productId,
+      title: run.title,
+      imageUrl: run.imageUrl,
+    }))
+    const pickedProductIds = pickedProducts.map((p) => p.product_id)
+
+    const aiVideoComplete = aiVideoRuns.length === flow.pickN
+    if (!aiVideoComplete) process.exitCode = 1
+
+    let resultHint = ''
+    if (!aiVideoComplete) {
+      resultHint =
+        stopReason === 'ai_credit_exhausted'
+          ? 'AI 信用额度为 0（今日剩余 0/N），已停止后续任务。'
+          : aiVideoRuns.length < flow.pickN
+            ? flow.pickN > compass.products.length
+              ? `--pick_n（${flow.pickN}）大于 Compass 可用商品数（${compass.products.length}），无法凑满成功次数。`
+              : `已达 Compass 候选上限仍未凑满 ${flow.pickN} 次成功（详见终端 aiVideoSkipped）。`
+            : ''
+    }
+
+    const modalTitle = aiVideoComplete
+      ? '任务已完成'
+      : stopReason === 'ai_credit_exhausted'
+        ? '任务已停止（AI 额度用尽）'
+        : '任务未完成'
+    const modalVariant = aiVideoComplete ? 'success' : 'warning'
+
+    const modalLines = [
+      `总体：${aiVideoComplete ? '成功' : '未完成'}`,
+      `店铺区域：${flow.shopRegion}`,
+      `Compass 候选：${compass.products.length} 个（Top ${flow.topN}）`,
+      `AI 视频成功：${aiVideoRuns.length} / ${flow.pickN}`,
+      `跳过 / 失败：${aiVideoSkipped.length} 条`,
+    ]
+    if (stopReason) modalLines.push(`stopReason：${stopReason}`)
+    if (resultHint) modalLines.push(`说明：${resultHint}`)
+    modalLines.push('')
+    modalLines.push(`成功商品 ID：${pickedProductIds.length ? pickedProductIds.join(', ') : '（无）'}`)
+    modalLines.push('')
+    modalLines.push('终端已输出完整 JSON；点击「确定」后关闭此窗口。')
 
     console.log(
       JSON.stringify(
         {
-          ok: allAiOk,
+          ok: aiVideoComplete,
+          stopReason,
           shopRegion: flow.shopRegion,
           topN: flow.topN,
           pickN: flow.pickN,
+          aiVideoSuccessCount: aiVideoRuns.length,
+          aiVideoSkippedCount: aiVideoSkipped.length,
+          compassCandidateCount: compass.products.length,
           compass,
           pickedProductIds,
-          pickedProducts: pickedRows,
-          aiVideoRuns: aiRuns,
+          pickedProducts,
+          aiVideoRuns,
+          aiVideoSkipped,
+          ...(aiVideoComplete
+            ? {}
+            : {
+                hint: resultHint,
+              }),
         },
         null,
         2,
       ),
     )
+
+    try {
+      await showPageResultModalUntilAck(page, {
+        title: modalTitle,
+        variant: modalVariant,
+        lines: modalLines,
+      })
+    } catch {
+      /* 页面不可用时仍可依赖终端输出 */
+    }
 
     if (keepOpen) {
       await new Promise(() => {})
