@@ -1,26 +1,13 @@
 {
   "id": "tiktok_publish_pending_videos",
   "name": "TikTok 发布待发布带货视频",
-  "description": "扫描 material-2-video 资源库，发布“未发布/已部分发布”且已生成的视频；发布前确认商品已加载并打开 AI 生成内容开关。",
+  "description": "扫描 material-2-video 资源库，发布“未发布/已部分发布”且已生成的视频；发布前确认商品已加载、补齐空商品名称，并打开 AI 生成内容开关。",
   "entry": "tiktok_publish_pending_videos.mjs",
   "order": 32,
-  "tags": [
-    "playwright",
-    "tiktok",
-    "shop",
-    "publish",
-    "ai-video"
-  ],
-  "version": "1.0.0",
-  "defaultArgs": [
-    "--cdp",
-    "http://127.0.0.1:55638",
-    "--shop_region",
-    "MY",
-    "--pages",
-    "3"
-  ],
-  "argsHint": "--cdp <url> 或 --useLaunchApi --code <code>；可选 --shop_region MY --max 200 --pages 5 --keepOpen",
+  "tags": ["playwright", "tiktok", "shop", "publish", "ai-video"],
+  "version": "1.0.1",
+  "defaultArgs": ["--cdp", "http://127.0.0.1:55638", "--shop_region", "MY", "--pages", "3"],
+  "argsHint": "--cdp <url> 或 --useLaunchApi --code <code>；可选 --shop_region MY --max 200 --pages 3 --keepOpen",
   "requiresLaunchServer": false,
   "mcpDoc": "mcp_tiktok_publish_pending_videos.md"
 }
