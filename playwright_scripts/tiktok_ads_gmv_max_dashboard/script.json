@@ -1,0 +1,13 @@
+{
+  "id": "tiktok_ads_gmv_max_dashboard",
+  "name": "TikTok Ads GMV Max 概览汇总",
+  "description": "访问 GMV Max dashboard，逐个切换店铺读取广告概览数据，并生成 JSON 与可视化 HTML 报告。",
+  "entry": "tiktok_ads_gmv_max_dashboard.mjs",
+  "order": 35,
+  "tags": ["playwright", "tiktok", "ads", "gmv-max", "dashboard", "report"],
+  "version": "1.0.0",
+  "defaultArgs": ["--useLaunchApi", "--code", "IKXSD8", "--aadvid", "7581297450980294657", "--date_range", "today"],
+  "argsHint": "必须传 --aadvid 广告账号ID；日期用 --date_range，默认 today，可选 today/yesterday/last7/last30/last3m/last6m/last12m。脚本会访问 /gmv-max/dashboard?aadvid=<ID>&oec_seller_id=withoutShop。",
+  "requiresLaunchServer": true,
+  "mcpDoc": "mcp_tiktok_ads_gmv_max_dashboard.md"
+}

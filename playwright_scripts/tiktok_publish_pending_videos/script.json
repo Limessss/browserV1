@@ -7,7 +7,7 @@
   "tags": ["playwright", "tiktok", "shop", "publish", "ai-video"],
   "version": "1.0.1",
   "defaultArgs": ["--cdp", "http://127.0.0.1:55638", "--shop_region", "MY", "--pages", "3"],
-  "argsHint": "--cdp <url> 或 --useLaunchApi --code <code>；可选 --shop_region MY --max 200 --pages 3 --keepOpen",
+  "argsHint": "--cdp 或 --useLaunchApi；--shop_region 支持单码、逗号或 JSON 数组依次执行；可选 --max --pages --keepOpen",
   "requiresLaunchServer": false,
   "mcpDoc": "mcp_tiktok_publish_pending_videos.md"
 }

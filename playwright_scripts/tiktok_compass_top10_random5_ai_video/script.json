@@ -7,7 +7,7 @@
   "tags": ["playwright", "tiktok", "shop", "compass", "ai-video"],
   "version": "1.0.0",
   "defaultArgs": ["--useLaunchApi", "--code", "ICHPPH", "--shop_region", "PH"],
-  "argsHint": "LaunchCode、--shop_region；可选 --top_n 10 --pick_n 5；--cdp 见 README。",
+  "argsHint": "--shop_region 支持单码、逗号分隔或 JSON 数组依次执行，如 '[\"MY\",\"PH\"]'; 可选 --top_n --pick_n；--cdp 见 README。",
   "requiresLaunchServer": true,
   "mcpDoc": "mcp_tiktok_compass_top10_random5_ai_video.md"
 }

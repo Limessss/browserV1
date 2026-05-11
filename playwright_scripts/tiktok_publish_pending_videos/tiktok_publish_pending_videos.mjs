@@ -33,6 +33,39 @@ function hasFlag(flagName) {
   return process.argv.includes(flagName)
 }
 
+/**
+ * 解析 `--shop_region`：单码、`MY,PH,TH` 逗号分隔、或 JSON 数组 `["MY","PH"]`；空则默认 MY。
+ * @param {string} raw getArgValue('--shop_region')
+ * @returns {string[]}
+ */
+function parseShopRegions(raw) {
+  const s = String(raw || '').trim()
+  if (!s) return ['MY']
+  if (s.startsWith('[')) {
+    let parsed
+    try {
+      parsed = JSON.parse(s)
+    } catch {
+      throw new Error(
+        '--shop_region JSON 解析失败，请使用例如 --shop_region \'["MY","PH","TH","VN"]\'',
+      )
+    }
+    if (!Array.isArray(parsed)) {
+      throw new Error('--shop_region 的 JSON 必须是字符串数组')
+    }
+    const codes = parsed.map((x) => String(x ?? '').trim()).filter(Boolean)
+    if (!codes.length) return ['MY']
+    return codes
+  }
+  if (s.includes(',')) {
+    return s
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean)
+  }
+  return [s]
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -613,82 +646,97 @@ async function publishOneFromRow(page, rowInfo, shopRegion) {
 }
 
 async function run() {
-  const shopRegion = getArgValue('--shop_region') || 'MY'
-  const pageUrl = buildMaterialPageUrl(shopRegion)
+  const shopRegions = parseShopRegions(getArgValue('--shop_region'))
+  const firstPageUrl = buildMaterialPageUrl(shopRegions[0])
   const maxPublishes = getNumberArg('--max', 200)
   const maxPages = getNumberArg('--pages', 5)
   const baseUrl = getArgValue('--baseUrl') || DEFAULT_BASE_URL
   const cdpUrl = getArgValue('--cdp') || process.env.PLAYWRIGHT_CDP_URL || process.env.CDP_URL || ''
   const keepOpen = hasFlag('--keepOpen')
+  const totalRegions = shopRegions.length
   const conn = hasFlag('--useLaunchApi')
-    ? await connectViaLaunchApi(baseUrl, pageUrl)
+    ? await connectViaLaunchApi(baseUrl, firstPageUrl)
     : await connectOverCdp(cdpUrl || 'http://127.0.0.1:19876')
   const { browser, page } = conn
-  const log = []
-  const skipped = []
-  const skippedKeys = new Set()
-  let currentPage = 1
 
   try {
-    await gotoList(page, pageUrl, currentPage)
-    await showPageToast(page, `[脚本] 开始发布待发布视频：区域 ${shopRegion}，目标成功 ${maxPublishes} 个`)
-    for (let guard = 0; log.length < maxPublishes && guard < maxPublishes * 10; guard += 1) {
-      let rows = await readRows(page)
-      let pending = rows.find((row) => isPending(row) && !skippedKeys.has(getPendingKey(row, currentPage)))
-      while (!pending && currentPage < maxPages) {
-        currentPage += 1
-        if (!(await clickPageNumber(page, currentPage))) break
-        rows = await readRows(page)
-        pending = rows.find((row) => isPending(row) && !skippedKeys.has(getPendingKey(row, currentPage)))
-      }
-      if (!pending) break
-      console.log(`[publish] page=${currentPage} id=${pending.id} ${pending.published}/${pending.publishTotal}`)
-      await showPageToast(
-        page,
-        `[脚本] 发布中：第 ${log.length + 1}/${maxPublishes} 个 · 第 ${currentPage} 页 · ${pending.id} · ${pending.published}/${pending.publishTotal}`,
-      )
-      try {
-        await publishOneFromRow(page, pending, shopRegion)
-        log.push({ page: currentPage, id: pending.id, before: `${pending.published}/${pending.publishTotal}` })
-        await showPageToast(page, `[脚本] 发布成功：${pending.id}`)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        const skipRecord = {
-          page: currentPage,
-          index: pending.index,
-          id: pending.id,
-          before: `${pending.published}/${pending.publishTotal}`,
-          error: message,
-        }
-        skipped.push(skipRecord)
-        skippedKeys.add(getPendingKey(pending, currentPage))
-        console.error(`[skip] page=${currentPage} id=${pending.id} ${skipRecord.before} ${message}`)
-        await showPageToast(page, `[脚本] 已跳过异常视频：${pending.id}，继续下一个`)
-      }
+    for (let ri = 0; ri < totalRegions; ri += 1) {
+      const shopRegion = shopRegions[ri]
+      const pageUrl = buildMaterialPageUrl(shopRegion)
+      const log = []
+      const skipped = []
+      const skippedKeys = new Set()
+      let currentPage = 1
+      const multiLabel = totalRegions > 1 ? ` [区域 ${ri + 1}/${totalRegions}]` : ''
+
       await gotoList(page, pageUrl, currentPage)
+      await showPageToast(page, `[脚本] 开始发布待发布视频${multiLabel}：区域 ${shopRegion}，目标成功 ${maxPublishes} 个`)
+      for (let guard = 0; log.length < maxPublishes && guard < maxPublishes * 10; guard += 1) {
+        let rows = await readRows(page)
+        let pending = rows.find((row) => isPending(row) && !skippedKeys.has(getPendingKey(row, currentPage)))
+        while (!pending && currentPage < maxPages) {
+          currentPage += 1
+          if (!(await clickPageNumber(page, currentPage))) break
+          rows = await readRows(page)
+          pending = rows.find((row) => isPending(row) && !skippedKeys.has(getPendingKey(row, currentPage)))
+        }
+        if (!pending) break
+        console.log(`[publish] shop_region=${shopRegion} page=${currentPage} id=${pending.id} ${pending.published}/${pending.publishTotal}`)
+        await showPageToast(
+          page,
+          `[脚本]${multiLabel} 发布中：第 ${log.length + 1}/${maxPublishes} 个 · 第 ${currentPage} 页 · ${pending.id} · ${pending.published}/${pending.publishTotal}`,
+        )
+        try {
+          await publishOneFromRow(page, pending, shopRegion)
+          log.push({ page: currentPage, id: pending.id, before: `${pending.published}/${pending.publishTotal}` })
+          await showPageToast(page, `[脚本] 发布成功：${pending.id}`)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          const skipRecord = {
+            page: currentPage,
+            index: pending.index,
+            id: pending.id,
+            before: `${pending.published}/${pending.publishTotal}`,
+            error: message,
+          }
+          skipped.push(skipRecord)
+          skippedKeys.add(getPendingKey(pending, currentPage))
+          console.error(`[skip] shop_region=${shopRegion} page=${currentPage} id=${pending.id} ${skipRecord.before} ${message}`)
+          await showPageToast(page, `[脚本] 已跳过异常视频：${pending.id}，继续下一个`)
+        }
+        await gotoList(page, pageUrl, currentPage)
+      }
+      const result = {
+        shopRegion,
+        publishedCount: log.length,
+        skippedCount: skipped.length,
+        log,
+        skipped,
+        ...(totalRegions > 1 ? { multiRegion: { index: ri + 1, total: totalRegions } } : {}),
+      }
+      console.log(JSON.stringify(result, null, 2))
+      await showPageResultModalUntilAck(page, {
+        title: log.length >= maxPublishes ? '任务已完成' : '任务结束',
+        variant: skipped.length ? 'warning' : 'success',
+        lines: [
+          ...(totalRegions > 1 ? [`多区域进度：${ri + 1} / ${totalRegions}`] : []),
+          `店铺区域：${shopRegion}`,
+          `成功发布：${log.length} / ${maxPublishes}`,
+          `跳过 / 失败：${skipped.length}`,
+          '',
+          `成功 ID：${log.length ? log.map((item) => item.id).join(', ') : '（无）'}`,
+          ...(skipped.length
+            ? [
+                '',
+                '跳过项：',
+                ...skipped.map((item) => `第 ${item.page} 页 ${item.id} ${item.before}：${item.error}`),
+              ]
+            : []),
+          '',
+          '终端已输出完整 JSON；点击「确定」后关闭此窗口。',
+        ],
+      })
     }
-    const result = { publishedCount: log.length, skippedCount: skipped.length, log, skipped }
-    console.log(JSON.stringify(result, null, 2))
-    await showPageResultModalUntilAck(page, {
-      title: log.length >= maxPublishes ? '任务已完成' : '任务结束',
-      variant: skipped.length ? 'warning' : 'success',
-      lines: [
-        `店铺区域：${shopRegion}`,
-        `成功发布：${log.length} / ${maxPublishes}`,
-        `跳过 / 失败：${skipped.length}`,
-        '',
-        `成功 ID：${log.length ? log.map((item) => item.id).join(', ') : '（无）'}`,
-        ...(skipped.length
-          ? [
-              '',
-              '跳过项：',
-              ...skipped.map((item) => `第 ${item.page} 页 ${item.id} ${item.before}：${item.error}`),
-            ]
-          : []),
-        '',
-        '终端已输出完整 JSON；点击「确定」后关闭此窗口。',
-      ],
-    })
     if (keepOpen) await new Promise(() => {})
   } finally {
     if (!keepOpen) await browser.close()

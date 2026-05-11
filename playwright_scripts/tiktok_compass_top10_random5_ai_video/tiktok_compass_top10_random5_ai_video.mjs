@@ -11,6 +11,9 @@
  *   node playwright_scripts/tiktok_compass_top10_random5_ai_video/tiktok_compass_top10_random5_ai_video.mjs --useLaunchApi --code ICHPPH --shop_region PH
  *   node ... --cdp http://127.0.0.1:19876 --shop_region PH
  *   node ... --useLaunchApi --code ICHPPH --shop_region PH --top_n 10 --pick_n 5
+ *   多区域依次执行（JSON 数组或逗号分隔）：
+ *   node ... --shop_region '["MY","PH","TH","VN"]'
+ *   node ... --shop_region MY,PH,TH,VN
  *
  * 页面内会在底部显示「[脚本] …」短时 Toast（约 3 秒，`pointer-events: none`，尽量不挡操作）。
  * 任务结束时会居中弹出带「确定」的结果 Modal（需点击后脚本才结束等待并关闭浏览器，除非 `--keepOpen`）。
@@ -1068,18 +1071,63 @@ function resolvePickN() {
   return n
 }
 
-function resolveFlowOptions() {
-  const shopRegion = getArgValue('--shop_region') || 'PH'
-  const compassUrl = buildCompassUrl(shopRegion)
-  const materialUrl = buildMaterialPageUrl(shopRegion)
-  const topN = resolveTopN()
-  const pickN = resolvePickN()
+/**
+ * 解析 `--shop_region`：单区域码、`MY,PH,TH` 逗号分隔、或 JSON 数组字符串 `["MY","PH"]`。
+ * @param {string} raw getArgValue('--shop_region')
+ * @returns {string[]}
+ */
+function parseShopRegions(raw) {
+  const s = String(raw || '').trim()
+  if (!s) return ['PH']
+  if (s.startsWith('[')) {
+    let parsed
+    try {
+      parsed = JSON.parse(s)
+    } catch {
+      throw new Error(
+        '--shop_region JSON 解析失败，请使用例如 --shop_region \'["MY","PH","TH","VN"]\'',
+      )
+    }
+    if (!Array.isArray(parsed)) {
+      throw new Error('--shop_region 的 JSON 必须是字符串数组')
+    }
+    const codes = parsed.map((x) => String(x ?? '').trim()).filter(Boolean)
+    if (!codes.length) return ['PH']
+    return codes
+  }
+  if (s.includes(',')) {
+    return s
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean)
+  }
+  return [s]
+}
+
+/**
+ * @returns {{ shopRegions: string[], topN: number, pickN: number }}
+ */
+function resolveSharedFlowOptions() {
+  const shopRegions = parseShopRegions(getArgValue('--shop_region'))
   return {
-    compassUrl,
-    materialUrl,
-    shopRegion: String(shopRegion).trim(),
-    topN,
-    pickN,
+    shopRegions,
+    topN: resolveTopN(),
+    pickN: resolvePickN(),
+  }
+}
+
+/**
+ * @param {string} shopRegion
+ * @param {{ topN: number, pickN: number }} shared
+ */
+function buildFlowForShopRegion(shopRegion, shared) {
+  const r = String(shopRegion || '').trim()
+  return {
+    compassUrl: buildCompassUrl(r),
+    materialUrl: buildMaterialPageUrl(r),
+    shopRegion: r,
+    topN: shared.topN,
+    pickN: shared.pickN,
   }
 }
 
@@ -1091,12 +1139,13 @@ async function run() {
   const cdpUrl =
     getArgValue('--cdp') || process.env.PLAYWRIGHT_CDP_URL || process.env.CDP_URL || ''
   const launchEdge = hasFlag('--launch-edge') || hasFlag('--msedge')
-  const flow = resolveFlowOptions()
+  const shared = resolveSharedFlowOptions()
+  const firstFlow = buildFlowForShopRegion(shared.shopRegions[0], shared)
 
   let page
   let close
   if (useLaunchApi) {
-    const conn = await connectViaLaunchApi(baseUrl, flow.compassUrl)
+    const conn = await connectViaLaunchApi(baseUrl, firstFlow.compassUrl)
     page = conn.page
     close = conn.close
   } else if (cdpUrl) {
@@ -1114,86 +1163,136 @@ async function run() {
   }
 
   try {
-    const compass = await runCompassTopProductsDefaultDate(page, {
-      pageUrl: flow.compassUrl,
-      shopRegion: flow.shopRegion,
-      topN: flow.topN,
-    })
+    const totalRegions = shared.shopRegions.length
+    /** 多区域时收集分项，最后只弹一次汇总 Modal */
+    /** @type {Array<{ shopRegion: string, ok: boolean, kind: 'compass' | 'ai', lines: string[] }>} */
+    const multiReport = []
 
-    if (!compass.ok || compass.products.length === 0) {
-      await showPageToast(page, `[脚本] Compass 阶段失败：未解析到可用商品，请查看终端输出`)
-      console.log(
-        JSON.stringify(
-          { ok: false, phase: 'compass', compass },
-          null,
-          2,
-        ),
-      )
-      process.exitCode = 1
+    for (let ri = 0; ri < totalRegions; ri += 1) {
+      const flow = buildFlowForShopRegion(shared.shopRegions[ri], shared)
+      const multiLabel = totalRegions > 1 ? ` [区域 ${ri + 1}/${totalRegions} · ${flow.shopRegion}]` : ''
+
       try {
-        await showPageResultModalUntilAck(page, {
-          title: 'Compass 阶段失败',
-          variant: 'danger',
-          lines: [
-            '阶段：Compass 单品卡',
-            `店铺区域：${flow.shopRegion}`,
-            `候选商品数：${compass.products.length}`,
-            ...(compass.hint ? [`说明：${compass.hint}`] : []),
-            '',
-            '终端已输出完整 JSON（phase: compass）。点击「确定」关闭。',
-          ],
-        })
+        await showPageToast(page, `[脚本] 开始执行${multiLabel}`)
       } catch {
-        /* 页面不可用时仍可依赖终端输出 */
+        /* ignore */
       }
-      return
-    }
 
-    /** 随机打乱全部 Compass 候选，依次尝试直到累计 pick_n 次成功（失败则换下一个）。 */
-    const candidatePool = pickRandomUnique(compass.products, compass.products.length)
+      const compass = await runCompassTopProductsDefaultDate(page, {
+        pageUrl: flow.compassUrl,
+        shopRegion: flow.shopRegion,
+        topN: flow.topN,
+      })
 
-    await showPageToast(
-      page,
-      `[脚本] 开始 AI 视频阶段：目标成功 ${flow.pickN} 次，候选 ${candidatePool.length} 个`,
-    )
+      if (!compass.ok || compass.products.length === 0) {
+        await showPageToast(
+          page,
+          totalRegions > 1
+            ? `[脚本] ${flow.shopRegion} · Compass 未取到可用商品，已记入最终汇总`
+            : `[脚本] Compass 阶段失败：未解析到可用商品，请查看终端输出`,
+        )
+        console.log(
+          JSON.stringify(
+            {
+              ok: false,
+              phase: 'compass',
+              multiRegion: totalRegions > 1 ? { index: ri + 1, total: totalRegions } : undefined,
+              shopRegion: flow.shopRegion,
+              compass,
+            },
+            null,
+            2,
+          ),
+        )
+        process.exitCode = 1
+        if (totalRegions > 1) {
+          multiReport.push({
+            shopRegion: flow.shopRegion,
+            ok: false,
+            kind: 'compass',
+            lines: [
+              '阶段：Compass 单品卡',
+              `候选商品数：${compass.products.length}`,
+              ...(compass.hint ? [`说明：${compass.hint}`] : []),
+            ],
+          })
+        } else {
+          try {
+            await showPageResultModalUntilAck(page, {
+              title: 'Compass 阶段失败',
+              variant: 'danger',
+              lines: [
+                '阶段：Compass 单品卡',
+                `店铺区域：${flow.shopRegion}`,
+                `候选商品数：${compass.products.length}`,
+                ...(compass.hint ? [`说明：${compass.hint}`] : []),
+                '',
+                '终端已输出完整 JSON（phase: compass）。点击「确定」关闭。',
+              ],
+            })
+          } catch {
+            /* 页面不可用时仍可依赖终端输出 */
+          }
+        }
+        continue
+      }
 
-    /** @type {Array<Record<string, unknown>>} */
-    const aiVideoRuns = []
-    /** @type {Array<Record<string, unknown>>} */
-    const aiVideoSkipped = []
+      /** 随机打乱全部 Compass 候选，依次尝试直到累计 pick_n 次成功（失败则换下一个）。 */
+      const candidatePool = pickRandomUnique(compass.products, compass.products.length)
 
-    /** @type {string | null} */
-    let stopReason = null
-
-    let ci = 0
-    while (aiVideoRuns.length < flow.pickN && ci < candidatePool.length) {
-      const row = candidatePool[ci]
-      ci += 1
-      const productId = row.product_id
       await showPageToast(
         page,
-        `[脚本] 第 ${ci}/${candidatePool.length} 个候选 · 已成功 ${aiVideoRuns.length}/${flow.pickN} · ${productId}`,
+        `[脚本] 开始 AI 视频阶段${multiLabel}：目标成功 ${flow.pickN} 次，候选 ${candidatePool.length} 个`,
       )
-      try {
-        const r = await runAiVideoFlow(page, {
-          pageUrl: flow.materialUrl,
-          productId,
-          shopRegion: flow.shopRegion,
-        })
-        aiVideoRuns.push({
-          index: aiVideoRuns.length + 1,
-          productId,
-          title: row.title,
-          rankInCompass: row.rank,
-          imageUrl: row.imageUrl,
-          ...r,
-        })
-      } catch (e) {
-        const code =
-          e && typeof e === 'object' && 'code' in e ? String((/** @type {{ code?: unknown }} */ (e)).code) : ''
-        const msg = e instanceof Error ? e.message : String(e)
-        if (code === AI_CREDIT_EXHAUSTED || msg.includes(AI_CREDIT_EXHAUSTED)) {
-          stopReason = 'ai_credit_exhausted'
+
+      /** @type {Array<Record<string, unknown>>} */
+      const aiVideoRuns = []
+      /** @type {Array<Record<string, unknown>>} */
+      const aiVideoSkipped = []
+
+      /** @type {string | null} */
+      let stopReason = null
+
+      let ci = 0
+      while (aiVideoRuns.length < flow.pickN && ci < candidatePool.length) {
+        const row = candidatePool[ci]
+        ci += 1
+        const productId = row.product_id
+        await showPageToast(
+          page,
+          `[脚本]${multiLabel} 第 ${ci}/${candidatePool.length} 个候选 · 已成功 ${aiVideoRuns.length}/${flow.pickN} · ${productId}`,
+        )
+        try {
+          const r = await runAiVideoFlow(page, {
+            pageUrl: flow.materialUrl,
+            productId,
+            shopRegion: flow.shopRegion,
+          })
+          aiVideoRuns.push({
+            index: aiVideoRuns.length + 1,
+            productId,
+            title: row.title,
+            rankInCompass: row.rank,
+            imageUrl: row.imageUrl,
+            ...r,
+          })
+        } catch (e) {
+          const code =
+            e && typeof e === 'object' && 'code' in e
+              ? String((/** @type {{ code?: unknown }} */ (e)).code)
+              : ''
+          const msg = e instanceof Error ? e.message : String(e)
+          if (code === AI_CREDIT_EXHAUSTED || msg.includes(AI_CREDIT_EXHAUSTED)) {
+            stopReason = 'ai_credit_exhausted'
+            aiVideoSkipped.push({
+              product_id: productId,
+              title: row.title,
+              rank: row.rank,
+              imageUrl: row.imageUrl,
+              error: msg,
+            })
+            break
+          }
           aiVideoSkipped.push({
             product_id: productId,
             title: row.title,
@@ -1201,98 +1300,159 @@ async function run() {
             imageUrl: row.imageUrl,
             error: msg,
           })
-          break
         }
-        aiVideoSkipped.push({
-          product_id: productId,
-          title: row.title,
-          rank: row.rank,
-          imageUrl: row.imageUrl,
-          error: msg,
-        })
+        await sleep(2000)
       }
-      await sleep(2000)
-    }
 
-    const pickedProducts = aiVideoRuns.map((run) => ({
-      rank: run.rankInCompass,
-      product_id: run.productId,
-      title: run.title,
-      imageUrl: run.imageUrl,
-    }))
-    const pickedProductIds = pickedProducts.map((p) => p.product_id)
+      const pickedProducts = aiVideoRuns.map((run) => ({
+        rank: run.rankInCompass,
+        product_id: run.productId,
+        title: run.title,
+        imageUrl: run.imageUrl,
+      }))
+      const pickedProductIds = pickedProducts.map((p) => p.product_id)
 
-    const aiVideoComplete = aiVideoRuns.length === flow.pickN
-    if (!aiVideoComplete) process.exitCode = 1
+      const aiVideoComplete = aiVideoRuns.length === flow.pickN
+      if (!aiVideoComplete) process.exitCode = 1
 
-    let resultHint = ''
-    if (!aiVideoComplete) {
-      resultHint =
-        stopReason === 'ai_credit_exhausted'
-          ? 'AI 信用额度为 0（今日剩余 0/N），已停止后续任务。'
-          : aiVideoRuns.length < flow.pickN
-            ? flow.pickN > compass.products.length
-              ? `--pick_n（${flow.pickN}）大于 Compass 可用商品数（${compass.products.length}），无法凑满成功次数。`
-              : `已达 Compass 候选上限仍未凑满 ${flow.pickN} 次成功（详见终端 aiVideoSkipped）。`
-            : ''
-    }
+      let resultHint = ''
+      if (!aiVideoComplete) {
+        resultHint =
+          stopReason === 'ai_credit_exhausted'
+            ? totalRegions > 1 && ri + 1 < totalRegions
+              ? '本区域 AI 信用额度已用尽（今日剩余 0/N）；将按配置继续下一店铺区域。'
+              : 'AI 信用额度为 0（今日剩余 0/N），本区域任务停止。'
+            : aiVideoRuns.length < flow.pickN
+              ? flow.pickN > compass.products.length
+                ? `--pick_n（${flow.pickN}）大于 Compass 可用商品数（${compass.products.length}），无法凑满成功次数。`
+                : `已达 Compass 候选上限仍未凑满 ${flow.pickN} 次成功（详见终端 aiVideoSkipped）。`
+              : ''
+      }
 
-    const modalTitle = aiVideoComplete
-      ? '任务已完成'
-      : stopReason === 'ai_credit_exhausted'
-        ? '任务已停止（AI 额度用尽）'
-        : '任务未完成'
-    const modalVariant = aiVideoComplete ? 'success' : 'warning'
+      const modalTitle = aiVideoComplete
+        ? '任务已完成'
+        : stopReason === 'ai_credit_exhausted'
+          ? '任务已停止（AI 额度用尽）'
+          : '任务未完成'
+      const modalVariant = aiVideoComplete ? 'success' : 'warning'
 
-    const modalLines = [
-      `总体：${aiVideoComplete ? '成功' : '未完成'}`,
-      `店铺区域：${flow.shopRegion}`,
-      `Compass 候选：${compass.products.length} 个（Top ${flow.topN}）`,
-      `AI 视频成功：${aiVideoRuns.length} / ${flow.pickN}`,
-      `跳过 / 失败：${aiVideoSkipped.length} 条`,
-    ]
-    if (stopReason) modalLines.push(`stopReason：${stopReason}`)
-    if (resultHint) modalLines.push(`说明：${resultHint}`)
-    modalLines.push('')
-    modalLines.push(`成功商品 ID：${pickedProductIds.length ? pickedProductIds.join(', ') : '（无）'}`)
-    modalLines.push('')
-    modalLines.push('终端已输出完整 JSON；点击「确定」后关闭此窗口。')
+      const modalLines = [
+        `总体：${aiVideoComplete ? '成功' : '未完成'}`,
+        ...(totalRegions > 1 ? [`多区域进度：${ri + 1} / ${totalRegions}`] : []),
+        `店铺区域：${flow.shopRegion}`,
+        `Compass 候选：${compass.products.length} 个（Top ${flow.topN}）`,
+        `AI 视频成功：${aiVideoRuns.length} / ${flow.pickN}`,
+        `跳过 / 失败：${aiVideoSkipped.length} 条`,
+      ]
+      if (stopReason) modalLines.push(`stopReason：${stopReason}`)
+      if (resultHint) modalLines.push(`说明：${resultHint}`)
+      modalLines.push('')
+      modalLines.push(`成功商品 ID：${pickedProductIds.length ? pickedProductIds.join(', ') : '（无）'}`)
+      modalLines.push('')
+      modalLines.push('终端已输出完整 JSON；点击「确定」后关闭此窗口。')
 
-    console.log(
-      JSON.stringify(
-        {
-          ok: aiVideoComplete,
-          stopReason,
+      console.log(
+        JSON.stringify(
+          {
+            ok: aiVideoComplete,
+            stopReason,
+            shopRegion: flow.shopRegion,
+            multiRegion: totalRegions > 1 ? { index: ri + 1, total: totalRegions } : undefined,
+            topN: flow.topN,
+            pickN: flow.pickN,
+            aiVideoSuccessCount: aiVideoRuns.length,
+            aiVideoSkippedCount: aiVideoSkipped.length,
+            compassCandidateCount: compass.products.length,
+            compass,
+            pickedProductIds,
+            pickedProducts,
+            aiVideoRuns,
+            aiVideoSkipped,
+            ...(aiVideoComplete
+              ? {}
+              : {
+                  hint: resultHint,
+                }),
+          },
+          null,
+          2,
+        ),
+      )
+
+      if (totalRegions > 1) {
+        multiReport.push({
           shopRegion: flow.shopRegion,
-          topN: flow.topN,
-          pickN: flow.pickN,
-          aiVideoSuccessCount: aiVideoRuns.length,
-          aiVideoSkippedCount: aiVideoSkipped.length,
-          compassCandidateCount: compass.products.length,
-          compass,
-          pickedProductIds,
-          pickedProducts,
-          aiVideoRuns,
-          aiVideoSkipped,
-          ...(aiVideoComplete
-            ? {}
-            : {
-                hint: resultHint,
-              }),
-        },
-        null,
-        2,
-      ),
-    )
+          ok: aiVideoComplete,
+          kind: 'ai',
+          lines: [
+            `总体：${aiVideoComplete ? '成功' : '未完成'}`,
+            `Compass 候选：${compass.products.length} 个（Top ${flow.topN}）`,
+            `AI 视频成功：${aiVideoRuns.length} / ${flow.pickN}`,
+            `跳过 / 失败：${aiVideoSkipped.length} 条`,
+            ...(stopReason ? [`stopReason：${stopReason}`] : []),
+            ...(resultHint ? [`说明：${resultHint}`] : []),
+            `成功商品 ID：${pickedProductIds.length ? pickedProductIds.join(', ') : '（无）'}`,
+          ],
+        })
+      } else {
+        try {
+          await showPageResultModalUntilAck(page, {
+            title: modalTitle,
+            variant: modalVariant,
+            lines: modalLines,
+          })
+        } catch {
+          /* 页面不可用时仍可依赖终端输出 */
+        }
+      }
 
-    try {
-      await showPageResultModalUntilAck(page, {
-        title: modalTitle,
-        variant: modalVariant,
-        lines: modalLines,
-      })
-    } catch {
-      /* 页面不可用时仍可依赖终端输出 */
+      if (stopReason === 'ai_credit_exhausted' && totalRegions > 1 && ri + 1 < totalRegions) {
+        try {
+          await showPageToast(
+            page,
+            `[脚本] ${flow.shopRegion} · AI 额度已用尽，继续下一区域：${shared.shopRegions[ri + 1]}`,
+          )
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    if (totalRegions > 1 && multiReport.length > 0) {
+      const allOk = multiReport.every((r) => r.ok)
+      /** 本回合至少进入过汇总（Compass 或 AI）的国家 */
+      const ranRegionCodes = [...new Set(multiReport.map((r) => r.shopRegion))]
+      let summaryTitle = '任务已结束（部分未完成）'
+      if (allOk) summaryTitle = '任务已完成'
+      const summaryVariant = allOk ? 'success' : 'warning'
+      /** @type {string[]} */
+      const summaryLines = [
+        `配置区域（共 ${totalRegions} 个）：${shared.shopRegions.join('、')}`,
+        `本回合已在页面中跑过分项的国家（${ranRegionCodes.length} 个）：${ranRegionCodes.join('、')}`,
+        '多区域模式约定：整次任务结束后只弹本窗口一次（不会按国别多次阻塞「确定」）。',
+        '某一区域 AI 额度用尽时，脚本会继续尝试下一区域（额度是否按区域独立以平台为准）。',
+        '终端已按区域分别输出完整 JSON。',
+        '',
+        '分项如下：',
+        '',
+      ]
+      for (const r of multiReport) {
+        const phaseLabel = r.kind === 'compass' ? 'Compass' : 'AI 视频'
+        summaryLines.push(`「${r.shopRegion}」· ${phaseLabel} · ${r.ok ? '已完成' : '未完成'}`)
+        summaryLines.push(...r.lines.map((line) => `  ${line}`))
+        summaryLines.push('')
+      }
+      summaryLines.push('点击「确定」关闭此窗口。')
+      if (!allOk) process.exitCode = 1
+      try {
+        await showPageResultModalUntilAck(page, {
+          title: summaryTitle,
+          variant: summaryVariant,
+          lines: summaryLines,
+        })
+      } catch {
+        /* 页面不可用时仍可依赖终端输出 */
+      }
     }
 
     if (keepOpen) {
