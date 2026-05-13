@@ -17,6 +17,7 @@
  *
  * 页面内会在底部显示「[脚本] …」短时 Toast（约 3 秒，`pointer-events: none`，尽量不挡操作）。
  * 任务结束时会居中弹出带「确定」的结果 Modal（需点击后脚本才结束等待并关闭浏览器，除非 `--keepOpen`）。
+ * 未使用 `--keepOpen` 时，「确定」显示 1:00 倒计时，到点未点则通过 CDP 关闭宿主浏览器。
  *
  * 导航仅等 `domcontentloaded`，不等 `networkidle`；各步骤在**对应可操作元素可见后再等待约 1 秒**执行动作。
  */
@@ -56,6 +57,13 @@ const EXPOSURE_HEADER_RE =
 
 /** 需要操作的元素变为可见后，再等待此时长（毫秒）再执行点击/排序等操作 */
 const READY_AFTER_VISIBLE_MS = 1000
+
+/** Compass 单品卡：轮询间隔；直到 `extractTopProductRows` 能解析出至少一行（ID + img[src] + 标题），避免仅 tbody tr 可见但行内未就绪 */
+const COMPASS_ROWS_READY_POLL_MS = 350
+/** 首次进入页面后，等待表格行数据就绪的上限（排序前；无商品时会占满该时长） */
+const COMPASS_PRE_SORT_ROWS_TIMEOUT_MS = 15_000
+/** 点击「曝光」排序后，等待表格刷新完毕的上限 */
+const COMPASS_POST_SORT_ROWS_TIMEOUT_MS = 75_000
 
 /** AI 额度文案：连续多少次解析结果一致才视为稳定（避免短暂 0/5 闪烁误判） */
 const AI_QUOTA_STABLE_NEED = 3
@@ -199,10 +207,39 @@ async function sleep(ms) {
   await new Promise((r) => setTimeout(r, ms))
 }
 
+/**
+ * `connectOverCDP` 时仅 `browser.close()` 往往只断开 Playwright 与调试端的连接，宿主窗口可能仍在；优先发送 CDP `Browser.close`。
+ * @param {import('playwright').Browser | null | undefined} browser
+ */
+async function closeChromiumWindowHard(browser) {
+  if (!browser) return
+  try {
+    const session = await browser.newBrowserCDPSession()
+    try {
+      await session.send('Browser.close')
+    } finally {
+      await session.detach().catch(() => {})
+    }
+  } catch {
+    await browser.close().catch(() => {})
+  }
+}
+
+/**
+ * @param {import('playwright').Page} page
+ */
+async function closeBrowserFromPlaywrightPage(page) {
+  const browser = page.context().browser()
+  if (browser) await closeChromiumWindowHard(browser)
+  else await page.context().close().catch(() => {})
+}
+
 /** 页面底部 Toast 展示时长（毫秒） */
 const PAGE_TOAST_MS = 3000
 const PAGE_TOAST_DOM_ID = 'ant-playwright-top-toast'
 const PAGE_MODAL_ROOT_ID = 'ant-playwright-result-modal'
+/** 结果 Modal 无操作时自动关闭浏览器（毫秒，默认 1 分钟）；与 `--keepOpen` 互斥 */
+const PAGE_MODAL_IDLE_BROWSER_CLOSE_MS = 60 * 1000
 
 /**
  * 在页面底部显示短时提示，默认 3 秒后移除；`pointer-events: none` 尽量不挡点击。
@@ -301,16 +338,20 @@ async function showPageToast(page, message) {
 
 /**
  * 任务结束时居中 Modal，展示摘要；需用户点击「确定」后关闭（脚本会等待该点击）。
+ * 默认在 {@link PAGE_MODAL_IDLE_BROWSER_CLOSE_MS} 内等待；超时则通过 CDP `Browser.close` 关闭宿主浏览器（`connectOverCDP` 下仅 `browser.close()` 往往无效）。
+ * 「确定」按钮显示 mm:ss 倒计时（`--keepOpen` 时不显示、不超时）。
  * @param {import('playwright').Page} page
- * @param {{ title: string, variant?: 'success' | 'warning' | 'danger', lines: string[] }} opts
+ * @param {{ title: string, variant?: 'success' | 'warning' | 'danger', lines: string[], suppressIdleBrowserClose?: boolean }} opts
  */
 async function showPageResultModalUntilAck(page, opts) {
+  const suppressIdleBrowserClose = Boolean(opts.suppressIdleBrowserClose)
   const title = String(opts.title || '任务结束').slice(0, 200)
   const variant = opts.variant === 'danger' || opts.variant === 'warning' ? opts.variant : 'success'
   const lines = (opts.lines || []).map((s) => String(s).slice(0, 2000))
+  const idleCountdownMs = suppressIdleBrowserClose ? 0 : PAGE_MODAL_IDLE_BROWSER_CLOSE_MS
 
   await page.evaluate(
-    ({ title: t, variant: v, lines: ln, rootId }) => {
+    ({ title: t, variant: v, lines: ln, rootId, idleCountdownMs: idleMs }) => {
       const existing = document.getElementById(rootId)
       if (existing) existing.remove()
 
@@ -440,7 +481,34 @@ async function showPageResultModalUntilAck(page, opts) {
       btn.onmouseleave = () => {
         btn.style.filter = 'none'
       }
-      btn.onclick = () => backdrop.remove()
+
+      const idleNum = Number(idleMs) || 0
+      if (idleNum > 0) {
+        const pad = (x) => String(x).padStart(2, '0')
+        const deadline = Date.now() + idleNum
+        let tickTimer = 0
+        const updateBtn = () => {
+          if (!backdrop.isConnected) return
+          const secLeft = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+          if (secLeft <= 0) {
+            btn.textContent = '确定'
+            if (tickTimer) window.clearInterval(tickTimer)
+            tickTimer = 0
+            return
+          }
+          const mm = Math.floor(secLeft / 60)
+          const ss = secLeft % 60
+          btn.textContent = '确定（' + pad(mm) + ':' + pad(ss) + '）'
+        }
+        tickTimer = window.setInterval(updateBtn, 250)
+        updateBtn()
+        btn.onclick = () => {
+          if (tickTimer) window.clearInterval(tickTimer)
+          backdrop.remove()
+        }
+      } else {
+        btn.onclick = () => backdrop.remove()
+      }
 
       foot.appendChild(btn)
       panel.appendChild(head)
@@ -449,11 +517,25 @@ async function showPageResultModalUntilAck(page, opts) {
       backdrop.appendChild(panel)
       document.body.appendChild(backdrop)
     },
-    { title, variant, lines, rootId: PAGE_MODAL_ROOT_ID },
+    { title, variant, lines, rootId: PAGE_MODAL_ROOT_ID, idleCountdownMs },
   )
 
+  const modalLocator = page.locator(`#${PAGE_MODAL_ROOT_ID}`)
   /* 必须由真实用户点击「确定」关闭；勿用 Playwright .click()，否则会立刻触发按钮等同瞬间关闭 */
-  await page.locator(`#${PAGE_MODAL_ROOT_ID}`).waitFor({ state: 'detached', timeout: 0 })
+  if (suppressIdleBrowserClose) {
+    await modalLocator.waitFor({ state: 'detached', timeout: 0 })
+    return
+  }
+
+  try {
+    await modalLocator.waitFor({ state: 'detached', timeout: PAGE_MODAL_IDLE_BROWSER_CLOSE_MS })
+  } catch {
+    try {
+      await closeBrowserFromPlaywrightPage(page)
+    } catch {
+      /* 连接已断开或页面已销毁 */
+    }
+  }
 }
 
 async function requestJson(url, options = {}) {
@@ -530,7 +612,7 @@ async function connectViaLaunchApi(baseUrl, startUrl) {
   const browser = await chromium.connectOverCDP(cdpUrl)
   const context = browser.contexts()[0] || (await browser.newContext())
   const page = context.pages()[0] || (await context.newPage())
-  return { browser, page, close: () => browser.close() }
+  return { browser, page, close: () => closeChromiumWindowHard(browser) }
 }
 
 async function connectBrowser({ headed, cdpUrl, launchEdge }) {
@@ -538,13 +620,13 @@ async function connectBrowser({ headed, cdpUrl, launchEdge }) {
     const browser = await chromium.connectOverCDP(cdpUrl)
     const context = browser.contexts()[0] || (await browser.newContext())
     const page = context.pages()[0] || (await context.newPage())
-    return { browser, page, close: () => browser.close() }
+    return { browser, page, close: () => closeChromiumWindowHard(browser) }
   }
   if (launchEdge) {
     const browser = await chromium.launch({ channel: 'msedge', headless: !headed })
     const context = await browser.newContext({ locale: 'zh-CN' })
     const page = await context.newPage()
-    return { browser, page, close: () => browser.close() }
+    return { browser, page, close: () => closeChromiumWindowHard(browser) }
   }
   const browser = await chromium.launch({
     headless: !headed,
@@ -552,7 +634,7 @@ async function connectBrowser({ headed, cdpUrl, launchEdge }) {
   })
   const context = await browser.newContext({ locale: 'zh-CN' })
   const page = await context.newPage()
-  return { browser, page, close: () => browser.close() }
+  return { browser, page, close: () => closeChromiumWindowHard(browser) }
 }
 
 /**
@@ -721,6 +803,30 @@ async function extractTopProductRows(page, n) {
 }
 
 /**
+ * 轮询直到 `extractTopProductRows` 与正式解析使用同一套规则且至少得到 `minRows` 条，避免「tr 已显示但 ID/图/标题未就绪」的竞态。
+ * @param {import('playwright').Page} page
+ * @param {{ minRows?: number, timeoutMs?: number, pollMs?: number, topN: number }} opts
+ * @returns {Promise<{ ok: boolean, lastCount: number }>}
+ */
+async function waitUntilCompassProductRowsReady(page, opts) {
+  const minRows = Math.max(1, opts.minRows ?? 1)
+  const timeoutMs = opts.timeoutMs ?? COMPASS_POST_SORT_ROWS_TIMEOUT_MS
+  const pollMs = opts.pollMs ?? COMPASS_ROWS_READY_POLL_MS
+  const limit = Math.max(opts.topN || 1, minRows)
+  const deadline = Date.now() + timeoutMs
+  let lastCount = 0
+  while (Date.now() < deadline) {
+    const rows = await extractTopProductRows(page, limit)
+    lastCount = rows.length
+    if (rows.length >= minRows) {
+      return { ok: true, lastCount }
+    }
+    await sleep(pollMs)
+  }
+  return { ok: false, lastCount }
+}
+
+/**
  * 单品卡：不修改日期，按曝光降序取前 topN。
  * @param {import('playwright').Page} page
  * @param {{ pageUrl: string, shopRegion: string, topN: number }} opts
@@ -733,10 +839,21 @@ async function runCompassTopProductsDefaultDate(page, opts) {
   await tableArea.waitFor({ state: 'visible', timeout: 90_000 }).catch(() => {})
   await sleep(READY_AFTER_VISIBLE_MS)
 
+  await showPageToast(page, `[脚本] Compass：等待表格行数据（ID/主图/标题）就绪…`)
+  await waitUntilCompassProductRowsReady(page, {
+    topN: opts.topN,
+    timeoutMs: COMPASS_PRE_SORT_ROWS_TIMEOUT_MS,
+    minRows: 1,
+  })
+
   const sortMeta = await trySortByExposureUsersDescending(page)
 
-  await page.locator('tbody tr').first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
-  await sleep(READY_AFTER_VISIBLE_MS)
+  await showPageToast(page, `[脚本] Compass：排序后等待表格刷新…`)
+  await waitUntilCompassProductRowsReady(page, {
+    topN: opts.topN,
+    timeoutMs: COMPASS_POST_SORT_ROWS_TIMEOUT_MS,
+    minRows: 1,
+  })
 
   const rows = await extractTopProductRows(page, opts.topN)
 
@@ -1016,6 +1133,142 @@ async function assertAiVideoCreditRemaining(page) {
 }
 
 /**
+ * 带货视频页偶发 Dreamina / Seedance 推广弹窗，会遮挡「AI 视频生成器」按钮。
+ * 这里只做关闭/确认，不点击「尝试 AI 视频生成器」，避免改变后续主流程。
+ * @param {import('playwright').Page} page
+ */
+async function dismissMaterialPagePromoDialogs(page) {
+  const promoText = /Dreamina|Seedance/i
+  let hasPromo = false
+  for (let i = 0; i < 20; i += 1) {
+    hasPromo = await page
+      .locator('body')
+      .filter({ hasText: promoText })
+      .isVisible({ timeout: 1000 })
+      .catch(() => false)
+    if (hasPromo) break
+    const seedanceRootCount = await page
+      .locator('[data-uid^="seedancemodal:"], [class*="modal-LmOKFj"]')
+      .count()
+      .catch(() => 0)
+    if (seedanceRootCount > 0) {
+      hasPromo = true
+      break
+    }
+    await sleep(500)
+  }
+  if (!hasPromo) return { dismissed: false, strategy: 'not-visible' }
+
+  const seedanceGotIt = page
+    .locator('[data-uid^="seedancemodal:button"], button')
+    .filter({ hasText: /\u6211\u77e5\u9053\u4e86|\u77e5\u9053\u4e86|Got it|I know|OK/i })
+    .first()
+  if (await seedanceGotIt.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await seedanceGotIt.click({ timeout: 8000, force: true })
+    await page.waitForTimeout(1200)
+    const stillVisible = await page
+      .locator('[data-uid^="seedancemodal:"], [class*="modal-LmOKFj"]')
+      .first()
+      .isVisible({ timeout: 1000 })
+      .catch(() => false)
+    if (!stillVisible) return { dismissed: true, strategy: 'seedance-got-it-button' }
+  }
+
+  const seedanceClose = page.locator('[data-uid="seedancemodal:iconclose:close"]').first()
+  if (await seedanceClose.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await seedanceClose.click({ timeout: 8000, force: true })
+    await page.waitForTimeout(1200)
+    const stillVisible = await page
+      .locator('[data-uid^="seedancemodal:"], [class*="modal-LmOKFj"]')
+      .first()
+      .isVisible({ timeout: 1000 })
+      .catch(() => false)
+    if (!stillVisible) return { dismissed: true, strategy: 'seedance-close-icon' }
+  }
+
+  const globalGotIt = page.locator('button').filter({
+    hasText: /\u6211\u77e5\u9053\u4e86|\u77e5\u9053\u4e86|Got it|I know|OK/i,
+  })
+  if ((await globalGotIt.count().catch(() => 0)) > 0) {
+    const btn = globalGotIt.last()
+    if (await btn.isVisible().catch(() => false)) {
+      await btn.click({ timeout: 8000, force: true })
+      await page.waitForTimeout(1200)
+      const stillVisible = await page
+        .locator('body')
+        .filter({ hasText: promoText })
+        .isVisible({ timeout: 1000 })
+        .catch(() => false)
+      if (!stillVisible) return { dismissed: true, strategy: 'global-got-it-button' }
+    }
+  }
+
+  const domDismissed = await page.evaluate(() => {
+    const textRe = /Dreamina|Seedance/i
+    const gotItRe = /\u6211\u77e5\u9053\u4e86|\u77e5\u9053\u4e86|Got it|I know|OK/i
+    const isVisible = (el) => {
+      if (!(el instanceof HTMLElement)) return false
+      const rect = el.getBoundingClientRect()
+      const style = window.getComputedStyle(el)
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none'
+    }
+    const click = (el) => {
+      if (!(el instanceof HTMLElement) || !isVisible(el)) return false
+      el.click()
+      return true
+    }
+    const roots = Array.from(document.querySelectorAll('body *')).filter(
+      (el) => isVisible(el) && textRe.test(el.textContent || ''),
+    )
+    let root = roots.find((el) => {
+      const rect = el.getBoundingClientRect()
+      return rect.width >= 300 && rect.height >= 200
+    })
+    if (!root) root = roots[0]
+    if (!root) return false
+
+    let box = root
+    for (let i = 0; i < 8 && box.parentElement; i += 1) {
+      const rect = box.getBoundingClientRect()
+      if (rect.width >= 500 && rect.height >= 300) break
+      box = box.parentElement
+    }
+
+    const buttons = Array.from(box.querySelectorAll('button,[role="button"]'))
+    const gotIt = buttons.find((el) => gotItRe.test(el.textContent || ''))
+    if (click(gotIt)) return true
+
+    const closers = Array.from(
+      box.querySelectorAll(
+        'button[aria-label*="close" i],button[aria-label*="关闭"],[class*="close" i],[class*="Close"],svg',
+      ),
+    )
+    for (const el of closers.reverse()) {
+      if (click(el instanceof SVGElement ? el.closest('button,[role="button"],span,div') : el)) return true
+    }
+    return false
+  })
+  if (domDismissed) {
+    await page.waitForTimeout(1200)
+    const stillVisible = await page
+      .locator('body')
+      .filter({ hasText: promoText })
+      .isVisible({ timeout: 1000 })
+      .catch(() => false)
+    if (!stillVisible) return { dismissed: true, strategy: 'dom-click' }
+  }
+
+  await page.keyboard.press('Escape').catch(() => {})
+  await page.waitForTimeout(1200)
+  const stillVisible = await page
+    .locator('body')
+    .filter({ hasText: promoText })
+    .isVisible({ timeout: 1000 })
+    .catch(() => false)
+  return { dismissed: !stillVisible, strategy: 'escape' }
+}
+
+/**
  * @param {import('playwright').Page} page
  * @param {{ pageUrl: string, productId: string, shopRegion: string }} opts
  */
@@ -1023,6 +1276,11 @@ async function runAiVideoFlow(page, opts) {
   const { pageUrl, productId, shopRegion } = opts
   await gotoSellerPageRespectingShopRegion(page, pageUrl, shopRegion)
   await showPageToast(page, `[脚本] 带货视频页已打开 · 商品 ${productId}`)
+
+  const promoDismiss = await dismissMaterialPagePromoDialogs(page)
+  if (promoDismiss.dismissed) {
+    await showPageToast(page, `[脚本] 已关闭带货视频页弹窗（${promoDismiss.strategy}）`)
+  }
 
   const aiVideoGenBtn = page.getByRole('button', { name: /AI 视频生成器/ })
   await aiVideoGenBtn.waitFor({ state: 'visible', timeout: 90_000 })
@@ -1221,6 +1479,7 @@ async function run() {
             await showPageResultModalUntilAck(page, {
               title: 'Compass 阶段失败',
               variant: 'danger',
+              suppressIdleBrowserClose: keepOpen,
               lines: [
                 '阶段：Compass 单品卡',
                 `店铺区域：${flow.shopRegion}`,
@@ -1399,6 +1658,7 @@ async function run() {
           await showPageResultModalUntilAck(page, {
             title: modalTitle,
             variant: modalVariant,
+            suppressIdleBrowserClose: keepOpen,
             lines: modalLines,
           })
         } catch {
@@ -1448,6 +1708,7 @@ async function run() {
         await showPageResultModalUntilAck(page, {
           title: summaryTitle,
           variant: summaryVariant,
+          suppressIdleBrowserClose: keepOpen,
           lines: summaryLines,
         })
       } catch {

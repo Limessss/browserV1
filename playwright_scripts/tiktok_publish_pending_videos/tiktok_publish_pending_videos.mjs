@@ -70,9 +70,38 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/**
+ * `connectOverCDP` 时仅 `browser.close()` 往往只断开 Playwright 与调试端的连接，宿主窗口可能仍在；优先发送 CDP `Browser.close`。
+ * @param {import('playwright').Browser | null | undefined} browser
+ */
+async function closeChromiumWindowHard(browser) {
+  if (!browser) return
+  try {
+    const session = await browser.newBrowserCDPSession()
+    try {
+      await session.send('Browser.close')
+    } finally {
+      await session.detach().catch(() => {})
+    }
+  } catch {
+    await browser.close().catch(() => {})
+  }
+}
+
+/**
+ * @param {import('playwright').Page} page
+ */
+async function closeBrowserFromPlaywrightPage(page) {
+  const browser = page.context().browser()
+  if (browser) await closeChromiumWindowHard(browser)
+  else await page.context().close().catch(() => {})
+}
+
 const PAGE_TOAST_MS = 3000
 const PAGE_TOAST_DOM_ID = 'ant-playwright-top-toast'
 const PAGE_MODAL_ROOT_ID = 'ant-playwright-result-modal'
+/** 结果 Modal 无操作时自动关闭浏览器（毫秒，默认 1 分钟）；与 `--keepOpen` 互斥 */
+const PAGE_MODAL_IDLE_BROWSER_CLOSE_MS = 60 * 1000
 
 async function showPageToast(page, message) {
   const msg = String(message || '').slice(0, 600)
@@ -161,13 +190,20 @@ async function showPageToast(page, message) {
   }
 }
 
+/**
+ * 默认在 {@link PAGE_MODAL_IDLE_BROWSER_CLOSE_MS} 内等待；超时通过 CDP `Browser.close` 关闭宿主浏览器。「确定」显示 mm:ss 倒计时（`--keepOpen` 时不显示、不超时）。
+ * @param {import('playwright').Page} page
+ * @param {{ title: string, variant?: 'success' | 'warning' | 'danger', lines: string[], suppressIdleBrowserClose?: boolean }} opts
+ */
 async function showPageResultModalUntilAck(page, opts) {
+  const suppressIdleBrowserClose = Boolean(opts.suppressIdleBrowserClose)
   const title = String(opts.title || '任务结束').slice(0, 200)
   const variant = opts.variant === 'danger' || opts.variant === 'warning' ? opts.variant : 'success'
   const lines = (opts.lines || []).map((line) => String(line).slice(0, 2000))
+  const idleCountdownMs = suppressIdleBrowserClose ? 0 : PAGE_MODAL_IDLE_BROWSER_CLOSE_MS
 
   await page.evaluate(
-    ({ title: t, variant: v, lines: ln, rootId }) => {
+    ({ title: t, variant: v, lines: ln, rootId, idleCountdownMs: idleMs }) => {
       const existing = document.getElementById(rootId)
       if (existing) existing.remove()
 
@@ -282,7 +318,34 @@ async function showPageResultModalUntilAck(page, opts) {
         'background:linear-gradient(135deg,#6366f1,#7c3aed)',
         'box-shadow:0 8px 24px rgba(99,102,241,.35)',
       ].join(';')
-      btn.onclick = () => backdrop.remove()
+
+      const idleNum = Number(idleMs) || 0
+      if (idleNum > 0) {
+        const pad = (x) => String(x).padStart(2, '0')
+        const deadline = Date.now() + idleNum
+        let tickTimer = 0
+        const updateBtn = () => {
+          if (!backdrop.isConnected) return
+          const secLeft = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+          if (secLeft <= 0) {
+            btn.textContent = '确定'
+            if (tickTimer) window.clearInterval(tickTimer)
+            tickTimer = 0
+            return
+          }
+          const mm = Math.floor(secLeft / 60)
+          const ss = secLeft % 60
+          btn.textContent = '确定（' + pad(mm) + ':' + pad(ss) + '）'
+        }
+        tickTimer = window.setInterval(updateBtn, 250)
+        updateBtn()
+        btn.onclick = () => {
+          if (tickTimer) window.clearInterval(tickTimer)
+          backdrop.remove()
+        }
+      } else {
+        btn.onclick = () => backdrop.remove()
+      }
 
       foot.appendChild(btn)
       panel.appendChild(head)
@@ -291,10 +354,24 @@ async function showPageResultModalUntilAck(page, opts) {
       backdrop.appendChild(panel)
       document.body.appendChild(backdrop)
     },
-    { title, variant, lines, rootId: PAGE_MODAL_ROOT_ID },
+    { title, variant, lines, rootId: PAGE_MODAL_ROOT_ID, idleCountdownMs },
   )
 
-  await page.locator(`#${PAGE_MODAL_ROOT_ID}`).waitFor({ state: 'detached', timeout: 0 })
+  const modalLocator = page.locator(`#${PAGE_MODAL_ROOT_ID}`)
+  if (suppressIdleBrowserClose) {
+    await modalLocator.waitFor({ state: 'detached', timeout: 0 })
+    return
+  }
+
+  try {
+    await modalLocator.waitFor({ state: 'detached', timeout: PAGE_MODAL_IDLE_BROWSER_CLOSE_MS })
+  } catch {
+    try {
+      await closeBrowserFromPlaywrightPage(page)
+    } catch {
+      /* 连接已断开或页面已销毁 */
+    }
+  }
 }
 
 function buildMaterialPageUrl(shopRegion) {
@@ -377,7 +454,7 @@ async function connectOverCdp(cdpUrl) {
   const browser = await chromium.connectOverCDP(cdpUrl)
   const context = browser.contexts()[0] || (await browser.newContext())
   const page = context.pages()[0] || (await context.newPage())
-  return { browser, page }
+  return { browser, page, close: () => closeChromiumWindowHard(browser) }
 }
 
 function parseRowText(text) {
@@ -675,7 +752,7 @@ async function run() {
   const conn = hasFlag('--useLaunchApi')
     ? await connectViaLaunchApi(baseUrl, firstPageUrl)
     : await connectOverCdp(cdpUrl || 'http://127.0.0.1:19876')
-  const { browser, page } = conn
+  const { page, close } = conn
 
   try {
     const multiReport = []
@@ -745,6 +822,7 @@ async function run() {
           await showPageResultModalUntilAck(page, {
             title: report.ok ? '任务已完成' : '任务结束',
             variant: skipped.length ? 'warning' : 'success',
+            suppressIdleBrowserClose: keepOpen,
             lines: [
               ...buildRegionResultLines(report),
               '',
@@ -777,6 +855,7 @@ async function run() {
           await showPageResultModalUntilAck(page, {
             title: '任务异常结束',
             variant: 'danger',
+            suppressIdleBrowserClose: keepOpen,
             lines: [
               ...buildRegionResultLines(report),
               '',
@@ -810,12 +889,13 @@ async function run() {
       await showPageResultModalUntilAck(page, {
         title: allOk ? '任务已完成' : '任务已结束（部分未完成）',
         variant: allOk && !hasSkipped ? 'success' : 'warning',
+        suppressIdleBrowserClose: keepOpen,
         lines: summaryLines,
       })
     }
     if (keepOpen) await new Promise(() => {})
   } finally {
-    if (!keepOpen) await browser.close()
+    if (!keepOpen && close) await close()
   }
 }
 
