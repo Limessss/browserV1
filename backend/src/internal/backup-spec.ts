@@ -6,6 +6,7 @@ import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import type { Database } from 'sql.js'
 
 import { listCores } from './browser-data'
+import { resolveBrowserUserDataRootAbs } from './browser-user-data-paths'
 
 export const PACKAGE_FORMAT = 'ant-chrome-full-backup'
 export const MANIFEST_VERSION = 1
@@ -182,7 +183,7 @@ function readDatabasePath(raw: Record<string, unknown>): string {
 function readUserDataRoot(raw: Record<string, unknown>): string {
   const browser = raw.browser as Record<string, unknown> | undefined
   let r = String(browser?.user_data_root ?? '').trim()
-  if (!r) r = 'data'
+  if (!r) r = 'profiles'
   return r
 }
 
@@ -231,7 +232,7 @@ export function buildBackupScope(
   })
 
   const userDataRootRel = readUserDataRoot(rawYaml)
-  const userDataRoot = resolvePath(appRootAbs, userDataRootRel)
+  const userDataRoot = resolveBrowserUserDataRootAbs(userDataRootRel)
   builder.add({
     id: 'browser_user_data_root',
     category: 'browser_data',

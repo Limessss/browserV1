@@ -6,6 +6,10 @@ import { dirname, join } from 'node:path'
 import yaml from 'js-yaml'
 import type { App } from 'electron'
 
+import {
+  DEFAULT_BROWSER_USER_DATA_ROOT,
+} from './browser-user-data-paths'
+
 let configPath = ''
 const DEFAULT_LAUNCH_PORT = 19876
 export const DEFAULT_LAUNCH_API_HEADER = 'X-Ant-Api-Key'
@@ -24,12 +28,13 @@ export function getAppStateRoot(): string {
 
 export function defaultBrowserSettings(): Record<string, unknown> {
   return {
-    userDataRoot: 'data',
+    userDataRoot: DEFAULT_BROWSER_USER_DATA_ROOT,
     defaultFingerprintArgs: ['--fingerprint-brand=Chrome', '--fingerprint-platform=windows'],
     defaultLaunchArgs: ['--disable-sync', '--no-first-run'],
     defaultProxy: '',
     startReadyTimeoutMs: 3000,
     startStableWindowMs: 1200,
+    isolateInstanceProxy: false,
   }
 }
 
@@ -67,7 +72,7 @@ function defaultRootYaml(): Record<string, unknown> {
       },
     },
     browser: {
-      user_data_root: 'data',
+      user_data_root: DEFAULT_BROWSER_USER_DATA_ROOT,
       default_fingerprint_args: ['--fingerprint-brand=Chrome', '--fingerprint-platform=windows'],
       default_launch_args: ['--disable-sync', '--no-first-run'],
       default_proxy: '',
@@ -233,7 +238,13 @@ export function loadBrowserSettingsMerged(): Record<string, unknown> {
       0,
       Number(b.start_stable_window_ms ?? def.startStableWindowMs ?? 1200) || 1200,
     ),
+    isolateInstanceProxy: Boolean(b.isolate_instance_proxy ?? def.isolateInstanceProxy ?? false),
   }
+}
+
+/** 实例代理是否与系统/全局代理隔离（默认关闭） */
+export function loadProxyIsolationEnabled(): boolean {
+  return Boolean(loadBrowserSettingsMerged().isolateInstanceProxy)
 }
 
 export function saveBrowserSettings(input: unknown): void {
@@ -247,8 +258,13 @@ export function saveBrowserSettings(input: unknown): void {
   const fp = o.defaultFingerprintArgs
   const lp = o.defaultLaunchArgs
 
+  const existingBrowser = (raw.browser && typeof raw.browser === 'object'
+    ? raw.browser
+    : {}) as Record<string, unknown>
+
   raw.browser = {
-    user_data_root: String(o.userDataRoot ?? def.userDataRoot).trim() || 'data',
+    ...existingBrowser,
+    user_data_root: String(o.userDataRoot ?? def.userDataRoot).trim() || DEFAULT_BROWSER_USER_DATA_ROOT,
     default_fingerprint_args: Array.isArray(fp)
       ? fp.map((x) => String(x))
       : (def.defaultFingerprintArgs as string[]),
@@ -264,6 +280,7 @@ export function saveBrowserSettings(input: unknown): void {
       Number(o.startStableWindowMs) > 0
         ? Number(o.startStableWindowMs)
         : Number(def.startStableWindowMs ?? 1200),
+    isolate_instance_proxy: Boolean(o.isolateInstanceProxy ?? def.isolateInstanceProxy ?? false),
   }
 
   mkdirSync(dirname(configPath), { recursive: true })

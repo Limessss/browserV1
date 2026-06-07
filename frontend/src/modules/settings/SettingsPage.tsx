@@ -11,6 +11,7 @@ import {
   fetchLinkeooErpConfig,
   saveLinkeooErpConfig,
 } from './api'
+import { fetchBrowserSettings, saveBrowserSettings } from '../browser/api'
 import type { AppSettings } from './types'
 import { defaultSettings } from './types'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
@@ -44,6 +45,7 @@ export function SettingsPage() {
     apiKeyDraft: '',
   })
   const [linkeooErpKeyConfigured, setLinkeooErpKeyConfigured] = useState(false)
+  const [isolateInstanceProxy, setIsolateInstanceProxy] = useState(false)
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState<'none' | 'init' | 'export' | 'import-reset' | 'import-merge'>('none')
   const [exportProgress, setExportProgress] = useState<BackupExportProgress | null>(null)
@@ -177,6 +179,12 @@ export function SettingsPage() {
       const data = await fetchSettings()
       setSettings(data)
       try {
+        const browserSettings = await fetchBrowserSettings()
+        setIsolateInstanceProxy(Boolean(browserSettings.isolateInstanceProxy))
+      } catch {
+        setIsolateInstanceProxy(false)
+      }
+      try {
         const erp = await fetchLinkeooErpConfig()
         setLinkeooErp({
           baseUrl: erp.baseUrl || 'https://api.linkeoo.com',
@@ -201,6 +209,16 @@ export function SettingsPage() {
     try {
       const success = await saveSettings(settings)
       if (success) {
+        try {
+          const browserSettings = await fetchBrowserSettings()
+          await saveBrowserSettings({
+            ...browserSettings,
+            isolateInstanceProxy,
+          })
+        } catch (error: any) {
+          toast.error(error?.message || '浏览器代理隔离设置保存失败')
+          return
+        }
         const erpPayload: { baseUrl: string; apiKey?: string } = {
           baseUrl: linkeooErp.baseUrl.trim() || 'https://api.linkeoo.com',
         }
@@ -415,6 +433,27 @@ export function SettingsPage() {
               autoComplete="off"
             />
           </FormItem>
+        </div>
+      </Card>
+
+      <Card
+        title="浏览器代理"
+        subtitle="控制实例网络流量是否受本机 Clash / 系统全局代理影响"
+      >
+        <div className="flex items-center justify-between">
+          <div className="max-w-2xl">
+            <p className="text-sm font-medium text-[var(--color-text-primary)]">实例代理与系统代理隔离</p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5 leading-relaxed">
+              开启后，浏览器实例仅走其绑定的代理（经本地网关转发），并清理子进程中的系统代理环境变量，降低与 Clash 全局/TUN 叠加导致的双重代理问题。默认关闭；修改后需重新启动已运行的实例才生效。
+            </p>
+          </div>
+          <Switch
+            checked={isolateInstanceProxy}
+            onChange={v => {
+              setIsolateInstanceProxy(v)
+              setHasChanges(true)
+            }}
+          />
         </div>
       </Card>
 

@@ -108,10 +108,16 @@ import {
   runPlaywrightScript,
   savePlaywrightScriptManifest,
 } from '../internal/playwright-scripts-service'
+import {
+  deleteProfileCredential,
+  listProfileCredentials,
+  saveProfileCredential,
+} from '../internal/profile-credential-service'
 import { getSqlite } from '../internal/database/sqlite-store'
 import {
   openCorePathInExplorer,
   openPlaywrightScriptPathInExplorer,
+  openPlaywrightScriptsRootInExplorer,
   openUserDataDir,
 } from '../internal/fs-open'
 import { invokeGoMock } from './go-mock'
@@ -220,6 +226,14 @@ function dispatch(db: Database, method: string, args: unknown[]): unknown | null
       return undefined
     case 'BrowserSnapshotDelete':
       browserSnapshotDelete(String(args[0] ?? ''), String(args[1] ?? ''))
+      return undefined
+
+    case 'BrowserProfileCredentialList':
+      return listProfileCredentials(db, String(args[0] ?? ''))
+    case 'BrowserProfileCredentialSave':
+      return saveProfileCredential(db, String(args[0] ?? ''), args[1] as never)
+    case 'BrowserProfileCredentialDelete':
+      deleteProfileCredential(db, String(args[0] ?? ''), String(args[1] ?? ''))
       return undefined
 
     case 'BrowserInstanceStatus': {
@@ -388,6 +402,18 @@ export async function invokeGoCall(method: string, args: unknown[]): Promise<unk
   if (method === 'OpenPlaywrightScriptPath') {
     try {
       await openPlaywrightScriptPathInExplorer(String(args[0] ?? ''), String(args[1] ?? ''))
+      return undefined
+    } catch (e) {
+      console.error('[go-call]', method, e)
+      if (e instanceof Error) {
+        throw e
+      }
+      throw new Error(String(e))
+    }
+  }
+  if (method === 'OpenPlaywrightScriptsDir') {
+    try {
+      await openPlaywrightScriptsRootInExplorer()
       return undefined
     } catch (e) {
       console.error('[go-call]', method, e)

@@ -1,0 +1,13 @@
+{
+  "id": "tiktok_auto_keyword_submit",
+  "name": "TikTok 自动关键词提报",
+  "description": "打开 trending_keywords 机会页，通过 lead/list API 抓取关键词；通过 Launch /api/integrations/linkeoo-erp 读取链氪 ERP 凭证（X-Api-Key 头），用 userinfo 匹配 shop_pk，调 /api/tiktok/product/search_by_keyword/ 拿商品后走 DOM 提报。",
+  "entry": "tiktok_auto_keyword_submit.mjs",
+  "order": 50,
+  "tags": ["playwright", "tiktok", "shop", "opportunity", "keyword", "submit", "erp"],
+  "version": "0.7.0",
+  "defaultArgs": ["--useLaunchApi", "--code", "GMNQ5O", "--shop_region", "PH", "--dryRun", "--limit", "3"],
+  "argsHint": "必传 --useLaunchApi 或 --cdp；--code 默认 GMNQ5O；--shop_region 默认 PH；--topN 默认 5；--limit 默认 50。ERP 凭证顺序：env ERP_API_KEY/ERP_API_BASE → --erpKey/--erpBase → Launch GET /api/integrations/linkeoo-erp。去掉 --dryRun 会真实 DOM 提报。",
+  "requiresLaunchServer": true,
+  "mcpDoc": "mcp_tiktok_auto_keyword_submit.md"
+}

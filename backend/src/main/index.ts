@@ -5,7 +5,12 @@ import { app, BrowserWindow, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { initAppConfig } from '../internal/app-config-store'
-import { initSqlite } from '../internal/database/sqlite-store'
+import {
+  configurePersistentUserData,
+  logBrowserDataPaths,
+  migrateLegacyBrowserUserData,
+} from '../internal/browser-user-data-paths'
+import { initSqlite, getSqlite } from '../internal/database/sqlite-store'
 import { initElectronPaths } from '../internal/electron-paths'
 import { registerIpcHandlers } from '../ipc/register-handlers'
 import { attachCloseConfirmation } from '../ipc/window-close-guard'
@@ -16,6 +21,8 @@ import { installAppLogBridge } from '../internal/app-runtime-service'
 import { destroyTray, initTray } from '../internal/tray'
 
 const isDev = !app.isPackaged
+
+configurePersistentUserData(app)
 
 /** 打包版临时调试：启动前设置环境变量 NEXBROWSER_DEVTOOLS=1（或 true/yes）自动打开 Console */
 function shouldOpenPackagedDevTools(): boolean {
@@ -113,6 +120,8 @@ app.whenReady().then(async () => {
   initElectronPaths(app)
   initAppConfig(app)
   await initSqlite(app)
+  migrateLegacyBrowserUserData(getSqlite())
+  logBrowserDataPaths(getSqlite())
   void startLaunchHttpServer().catch((e) => console.error('[LaunchServer]', e))
   registerIpcHandlers({ getWindow })
   mainWindow = createWindow()

@@ -5,6 +5,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 import { shell } from 'electron'
 import { loadBrowserSettingsMerged } from './app-config-store'
+import { resolveBrowserUserDataRootAbs } from './browser-user-data-paths'
 import { resolveAppRelativePath, resolveCoreStoredPath } from './electron-paths'
 
 export async function openUserDataDir(subDir: string): Promise<void> {
@@ -13,8 +14,7 @@ export async function openUserDataDir(subDir: string): Promise<void> {
     throw new Error('用户数据目录不能为空')
   }
   const settings = loadBrowserSettingsMerged()
-  const rootName = String(settings.userDataRoot ?? 'data').trim() || 'data'
-  const rootAbs = resolveAppRelativePath(rootName)
+  const rootAbs = resolveBrowserUserDataRootAbs(String(settings.userDataRoot ?? ''))
   const fullPath = resolve(rootAbs, rel)
   mkdirSync(fullPath, { recursive: true })
   const errMsg = await shell.openPath(fullPath)
@@ -33,6 +33,15 @@ export async function openCorePathInExplorer(corePath: string): Promise<void> {
     throw new Error(`路径不存在: ${fullPath}`)
   }
   const errMsg = await shell.openPath(fullPath)
+  if (errMsg) {
+    throw new Error(errMsg)
+  }
+}
+
+export async function openPlaywrightScriptsRootInExplorer(): Promise<void> {
+  const userRoot = resolveAppRelativePath('playwright_scripts')
+  mkdirSync(userRoot, { recursive: true })
+  const errMsg = await shell.openPath(userRoot)
   if (errMsg) {
     throw new Error(errMsg)
   }

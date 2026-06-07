@@ -1,0 +1,36 @@
+{
+  "id": "tiktok_affiliate_bulk_invite_creators",
+  "name": "TikTok 联盟批量邀约达人",
+  "description": "打开 TikTok Shop 联盟达人发现页，应用筛选，勾选达人，切换到创建新邀请、选仅佣金、填表（含商品ID、佣金率、联系方式）后发送邀约。",
+  "entry": "tiktok_affiliate_bulk_invite_creators.mjs",
+  "order": 46,
+  "tags": [
+    "playwright",
+    "tiktok",
+    "affiliate",
+    "creator",
+    "invite"
+  ],
+  "version": "1.2.0",
+  "defaultArgs": [
+    "--useLaunchApi",
+    "--code",
+    "BUPM2Z",
+    "--shop_region",
+    "PH",
+    "--max_creators",
+    "50",
+    "--useNewFlow",
+    "--product_category",
+    "\u5973\u88c5\u4e0e\u5973\u58eb\u5185\u8863-\u5973\u58eb\u5185\u8863",
+    "--product_ids",
+    "1733357293296059415",
+    "--creator_search",
+    "top",
+    "--random_sort",
+    "true"
+  ],
+  "argsHint": "\u9ed8\u8ba4\u53c2\u6570\uff1acode=BUPM2Z\uff0cshop_region=PH\uff0cmax_creators=50\uff0c\u5546\u54c1\u7c7b\u76ee=\u5973\u88c5\u4e0e\u5973\u58eb\u5185\u8863-\u5973\u58eb\u5185\u8863\uff0cproduct_ids=1733357293296059415\uff0ccreator_search=top\uff0crandom_sort=true\u3002\u9ed8\u8ba4\u7b5b\u9009\u8fd8\u4f1a\u5e94\u7528\u5e73\u5747\u4f63\u91d1\u7387=\u5c0f\u4e8e15%\u3001\u8fc7\u53bb90\u5929\u672a\u9080\u7ea6\u3002\u652f\u6301\u591a\u5c42\u7ea7\u7c7b\u76ee\uff1a--product_category \"\u5973\u88c5\u4e0e\u5973\u58eb\u5185\u8863-\u5973\u58eb\u8fde\u8863\u88d9\"\u3002\u53ef\u8986\u76d6\u8fbe\u4eba\u641c\u7d22\uff1a--creator_search \"bra\"\uff1b\u968f\u673a\u6392\u5e8f\uff1a--random_sort true\uff0c\u6216\u6307\u5b9a\u6392\u5e8f\uff1a--sort_by \"\u4e92\u52a8\u7387\"\u3002\u5176\u4ed6\u53ef\u9009\u53c2\u6570\uff1a--invitation_name\u3001--invitation_text\u3001--expiration_days\u3001--facebook\u3001--standard_commission_rate\u3001--shop_ads_commission\u3001--shop_ads_commission_rate \u7b49\u3002",
+  "requiresLaunchServer": true,
+  "mcpDoc": "mcp_tiktok_affiliate_bulk_invite_creators.md"
+}

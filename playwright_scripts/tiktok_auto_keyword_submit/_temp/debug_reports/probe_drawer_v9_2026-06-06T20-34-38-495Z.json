@@ -1,0 +1,20 @@
+{
+  "code": "GMNQ5O",
+  "ok": false,
+  "targetUrl": "https://seller.tiktokshopglobalselling.com/product/opportunity?shop_region=PH&sort_field=1&use_like=false&tab=trending_keywords",
+  "cdpUrl": "http://127.0.0.1:19876",
+  "keyword": "Cotton Spandex Cross Over Blouse",
+  "drawerResult": {
+    "ok": false,
+    "steps": [],
+    "target": "Cotton Spandex Cross Over Blouse",
+    "error": "row not found",
+    "visibleRowCount": 1,
+    "rowTexts": [
+      "关键词参考图片潜在商家来源搜索次数在售商品 操作"
+    ]
+  },
+  "errors": [
+    "row not found"
+  ]
+}

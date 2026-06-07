@@ -686,6 +686,25 @@ async function ensureAiGeneratedContentEnabled(page) {
   if (!result.ok) throw new Error(`未找到 AI 生成的内容开关: ${JSON.stringify(result)}`)
 }
 
+async function waitPublishFormReady(page) {
+  await page.waitForFunction(
+    () => {
+      const bodyText = document.body?.innerText || ''
+      const hasFormSections =
+        bodyText.includes('\u53d1\u5e03\u8d26\u53f7') &&
+        bodyText.includes('\u89c6\u9891\u8be6\u60c5') &&
+        bodyText.includes('\u5546\u54c1') &&
+        bodyText.includes('\u53d1\u5e03\u504f\u597d')
+      const hasPublishButton = Array.from(document.querySelectorAll('button,[role="button"]')).some((el) =>
+        (el.textContent || '').replace(/\s+/g, ' ').trim().includes('\u5728 TikTok \u4e0a\u53d1\u5e03'),
+      )
+      return hasFormSections && hasPublishButton
+    },
+    null,
+    { timeout: 45000, polling: 500 },
+  )
+}
+
 async function clickFinalPublishWhenReady(page, rowInfo, shopRegion) {
   await waitProductCardLoaded(page, rowInfo.id)
   await ensureProductNameFilled(page, shopRegion)
@@ -715,7 +734,7 @@ async function publishOneFromRow(page, rowInfo, shopRegion) {
   await page.getByText('你的视频已准备就绪').waitFor({ state: 'visible', timeout: 30000 })
   await sleep(1000)
   await page.getByRole('button', { name: '在 TikTok 上发布' }).last().click()
-  await page.locator('text=TikTok 账号详情').waitFor({ state: 'visible', timeout: 30000 })
+  await waitPublishFormReady(page)
   await sleep(1500)
   await clickFinalPublishWhenReady(page, rowInfo, shopRegion)
   await page.getByText('你的视频发布成功').waitFor({ state: 'visible', timeout: 90000 })
@@ -823,11 +842,7 @@ async function run() {
             title: report.ok ? '任务已完成' : '任务结束',
             variant: skipped.length ? 'warning' : 'success',
             suppressIdleBrowserClose: keepOpen,
-            lines: [
-              ...buildRegionResultLines(report),
-              '',
-              '终端已输出完整 JSON；点击「确定」后关闭此窗口。',
-            ],
+            lines: buildRegionResultLines(report),
           })
         }
       } catch (error) {
@@ -856,11 +871,7 @@ async function run() {
             title: '任务异常结束',
             variant: 'danger',
             suppressIdleBrowserClose: keepOpen,
-            lines: [
-              ...buildRegionResultLines(report),
-              '',
-              '终端已输出完整 JSON；点击「确定」后关闭此窗口。',
-            ],
+            lines: buildRegionResultLines(report),
           })
         }
       }
@@ -874,7 +885,6 @@ async function run() {
         `已执行区域：${multiReport.map((report) => report.shopRegion).join('、')}`,
         '多区域模式：所有区域执行完成后仅弹出本汇总窗口一次。',
         '某一区域异常时已记入汇总，并继续尝试下一区域。',
-        '终端已按区域分别输出完整 JSON。',
         '',
         '分项如下：',
         '',
@@ -884,7 +894,6 @@ async function run() {
         summaryLines.push(...buildRegionResultLines(report).map((line) => (line ? `  ${line}` : line)))
         summaryLines.push('')
       }
-      summaryLines.push('点击「确定」关闭此窗口。')
       if (!allOk) process.exitCode = 1
       await showPageResultModalUntilAck(page, {
         title: allOk ? '任务已完成' : '任务已结束（部分未完成）',

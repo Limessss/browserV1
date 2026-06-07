@@ -1,0 +1,13 @@
+{
+  "id": "tiktok_product_optimizer_batch_update",
+  "name": "TikTok Shop 商品批量优化更新",
+  "description": "逐个打开 TikTok Shop 商品优化页，点击“批量优化”，并在侧边栏持续点击“更新 N 件商品”，直到无商品可更新。",
+  "entry": "tiktok_product_optimizer_batch_update.mjs",
+  "order": 45,
+  "tags": ["playwright", "tiktok", "shop", "product", "optimizer"],
+  "version": "1.0.0",
+  "defaultArgs": ["--useLaunchApi", "--code", "IKXSD8", "--shop_region", "MY", "--dryRun"],
+  "argsHint": "--shop_region 支持单个、逗号分隔或 JSON 数组；默认 MY。去掉 --dryRun 会真实循环点击“更新 N 件商品”。可用 --max_update_batches 限制最大批次数。",
+  "requiresLaunchServer": true,
+  "mcpDoc": "mcp_tiktok_product_optimizer_batch_update.md"
+}

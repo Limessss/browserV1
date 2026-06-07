@@ -348,7 +348,8 @@ export async function savePlaywrightScriptManifest(
 function resolveNodeRunner(): { command: string; extraEnv?: Record<string, string> } {
   /**
    * 在打包 Electron 应用里，目标机器通常没有全局 node/node.exe。
-   * 这里使用当前可执行文件并开启 ELECTRON_RUN_AS_NODE，让 Electron 以 Node 模式执行脚本。
+   * 使用当前可执行文件并开启 ELECTRON_RUN_AS_NODE，让 Electron 以 Node 模式执行脚本。
+   * 项目要求 Electron 35+（内置 Node 22），以便 Playwright 脚本可用 node:sqlite 等 Node 22 API。
    */
   const execPath = process.execPath
   if (execPath && execPath.trim().length > 0) {

@@ -39,6 +39,7 @@ import {
   reloadAppConfig,
 } from './app-config-store'
 import { resolveDatabasePath } from './paths'
+import { resolveBrowserUserDataRootAbs, DEFAULT_BROWSER_USER_DATA_ROOT } from './browser-user-data-paths'
 import { browserInstanceStop } from './browser-instance-service'
 import { listRunningProfileIds } from './browser-runtime-store'
 import { stopLaunchHttpServer, startLaunchHttpServer } from './launch-http-server'
@@ -631,9 +632,9 @@ function importFileTrees(
     }
   }
 
-  const uRootRel = String((raw.browser as { user_data_root?: string })?.user_data_root ?? 'data')
+  const uRootRel = String((raw.browser as { user_data_root?: string })?.user_data_root ?? DEFAULT_BROWSER_USER_DATA_ROOT)
   const userDataSrc = join(payloadRoot, 'browser', 'user-data')
-  const userDataDst = isAbsolute(uRootRel) ? uRootRel : join(stateRoot, uRootRel)
+  const userDataDst = resolveBrowserUserDataRootAbs(uRootRel)
   if (existsSync(userDataSrc)) {
     try {
       if (resetFirst) {
@@ -739,7 +740,7 @@ function defaultRootYamlForInit(licenseApp?: Record<string, unknown>): Record<st
     app: appSection,
     runtime: { max_memory_mb: 0, gc_percent: 100 },
     browser: {
-      user_data_root: 'data',
+      user_data_root: DEFAULT_BROWSER_USER_DATA_ROOT,
       default_fingerprint_args: ['--fingerprint-brand=Chrome', '--fingerprint-platform=windows'],
       default_launch_args: ['--disable-sync', '--no-first-run'],
       default_proxy: '',
@@ -759,6 +760,7 @@ function clearBusinessTables(db: Database): void {
   const tables = [
     'launch_codes',
     'browser_profiles',
+    'browser_profile_credentials',
     'browser_proxies',
     'browser_cores',
     'browser_bookmarks',
@@ -851,8 +853,8 @@ function backupImportFromPath(
     } catch {
       /* ignore */
     }
-    const oldU = String((cur.browser as { user_data_root?: string })?.user_data_root || 'data')
-    const uAbs = isAbsolute(oldU) ? oldU : join(stateRoot, oldU)
+    const oldU = String((cur.browser as { user_data_root?: string })?.user_data_root || DEFAULT_BROWSER_USER_DATA_ROOT)
+    const uAbs = resolveBrowserUserDataRootAbs(oldU)
     if (uAbs.toLowerCase() !== dataRoot0.toLowerCase()) {
       try {
         removeDirContentsExcept(uAbs, keep0)
@@ -999,10 +1001,10 @@ export async function backupInitializeSystem(): Promise<Record<string, unknown>>
   } catch {
     /* ignore */
   }
-  const oldU = String((cur.browser as { user_data_root?: string })?.user_data_root || 'data')
-  const newU = 'data'
-  for (const p of [oldU, newU]) {
-    const uAbs = isAbsolute(p) ? p : join(root, p)
+  const oldU = String((cur.browser as { user_data_root?: string })?.user_data_root || DEFAULT_BROWSER_USER_DATA_ROOT)
+  const newU = DEFAULT_BROWSER_USER_DATA_ROOT
+  for (const rel of [oldU, newU]) {
+    const uAbs = resolveBrowserUserDataRootAbs(rel)
     if (uAbs.toLowerCase() === dataRoot.toLowerCase()) {
       continue
     }

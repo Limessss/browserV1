@@ -5,6 +5,7 @@ import { Badge, Button, Card, FormItem, Input, Modal, StatCard, Table, Textarea,
 import { fetchDashboardStats, redeemCDKey, reloadConfig } from '../../dashboard/api'
 import type { TableColumn } from '../../../shared/components/Table'
 import type { BrowserCore, BrowserCoreInput, BrowserProfile, BrowserProxy, BrowserSettings, BrowserGroupWithCount } from '../types'
+import { defaultBrowserSettingsValue } from '../types'
 import { InstanceFilterBar, EMPTY_FILTERS } from '../components/InstanceFilterBar'
 import type { InstanceFilters } from '../components/InstanceFilterBar'
 import { TagFilterBar } from '../components/TagFilterBar'
@@ -297,14 +298,7 @@ export function BrowserListPage() {
 
   // 基础配置弹窗
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
-  const [settings, setSettings] = useState<BrowserSettings>({
-    userDataRoot: 'data',
-    defaultFingerprintArgs: [],
-    defaultLaunchArgs: [],
-    defaultProxy: '',
-    startReadyTimeoutMs: 3000,
-    startStableWindowMs: 1200,
-  })
+  const [settings, setSettings] = useState<BrowserSettings>({ ...defaultBrowserSettingsValue })
   const [fingerprintText, setFingerprintText] = useState('')
   const [launchText, setLaunchText] = useState('')
   const [savingSettings, setSavingSettings] = useState(false)
@@ -1212,7 +1206,7 @@ export function BrowserListPage() {
 
           {/* 其他设置 */}
           <FormItem label="用户数据根目录">
-            <Input value={settings.userDataRoot} onChange={e => setSettings(prev => ({ ...prev, userDataRoot: e.target.value }))} placeholder="data" />
+            <Input value={settings.userDataRoot} onChange={e => setSettings(prev => ({ ...prev, userDataRoot: e.target.value }))} placeholder="profiles" />
           </FormItem>
           <FormItem label="默认指纹参数（每行一个）">
             <Textarea value={fingerprintText} onChange={e => setFingerprintText(e.target.value)} rows={3} placeholder="--fingerprint-brand=Chrome" />

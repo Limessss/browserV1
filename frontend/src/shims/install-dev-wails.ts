@@ -92,12 +92,13 @@ function devInvokeGo(method: string, _args: unknown[]): Promise<unknown> {
   switch (method) {
     case 'GetBrowserSettings':
       return Promise.resolve({
-        userDataRoot: 'data',
+        userDataRoot: 'profiles',
         defaultFingerprintArgs: ['--fingerprint-brand=Chrome', '--fingerprint-platform=windows'],
         defaultLaunchArgs: ['--disable-sync', '--no-first-run'],
         defaultProxy: '',
         startReadyTimeoutMs: 3000,
         startStableWindowMs: 1200,
+        isolateInstanceProxy: false,
       })
     case 'SaveBrowserSettings':
       return Promise.resolve(undefined)

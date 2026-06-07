@@ -1,0 +1,530 @@
+{
+  "code": "GMNQ5O",
+  "ok": true,
+  "targetUrl": "https://seller.tiktokshopglobalselling.com/product/opportunity?shop_region=PH&sort_field=1&use_like=false&tab=trending_keywords",
+  "cdpUrl": "http://127.0.0.1:19876",
+  "drawerResult": {
+    "rounds": [
+      {
+        "phase": "after-row-click",
+        "label": "after-row-click",
+        "drawerCount": 0,
+        "drawerClasses": [],
+        "bodyTail": "首页 常用 商品 管理全球商品 销售加速工具 商品管理 添加商品 商品组合 商品优化工具 价格诊断 商品评分 媒体中心 商品机会 管理库存 订单 物流 广告营销 客户 联盟 直播和视频 成长中心 应用和服务商 数据分析 账号健康 合规中心 财务 商家中心 客户消息 2 2 PH Philippines(Varerise) 联系客户经理 商品机会 ' ' ' ' ' ' ' 商品机会 已保存的机会 我的提报 (810/11787) 发现 TikTok Shop 上有畅销潜力的商品。 了解更多 将你的畅销商品上架 TikTok Shop，解锁更多增长机会！ 高潜力商品 热门关键词 低竞争类目 热门搜索关键词 筛选 排序 关键词 参考图片 潜在商家来源 搜索次数 在售商品 操作 新品 # kemeja polka anime Womenswear & Underwear / Women's Tops / Blouses & Shirts 热门搜索 搜索关键词 3,500 0 查看详情 # Striped Knit Cardigan and Dress Set Womenswear & Underwear / Women's Tops / Blouses & Shirts TikTok 热门商品 热卖榜 3,335 1 查看详情 # Embroidered Cotton Linen Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 全球畅销商品 热卖榜 3,335 1 查看详情 # turtle neck top Womenswear & Underwear / Women's Tops / Blouses & Shirts TikTok 热门商品 搜索关键词 3,333 351 查看详情 # Korean Trendy Roundneck Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 全球畅销商品 热卖榜 3,331 1 查看详情 # Asymmetrical Long Sleeve Bodycon T-Shirt Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,323 1 查看详情 # Cotton Solid Color Button-Up Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,319 1 查看详情 # Casual Korean Chiffon Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,305 1 查看详情 # Slim Knit Striped Casual Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts TikTok 热门商品 热卖榜 3,296 0 查看详情 # Women's Premium Blouse Set Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,291 0 查看详情",
+        "inputs": [
+          {
+            "tag": "INPUT",
+            "type": "",
+            "placeholder": "搜索商品名称或关键词",
+            "role": "",
+            "cls": "core-input core-input-size-default",
+            "value": "",
+            "checked": false
+          }
+        ],
+        "checkboxes": [],
+        "buttons": [
+          {
+            "text": "已保存的机会",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": false
+          },
+          {
+            "text": "我的提报(810/11787)",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": false
+          },
+          {
+            "text": "筛选",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": true
+          },
+          {
+            "text": "排序",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": true
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          }
+        ],
+        "targetPidMatches": []
+      },
+      {
+        "phase": "after-click-bind",
+        "label": "after-click-bind",
+        "drawerCount": 14,
+        "drawerClasses": [
+          "core-drawer-inner",
+          "core-drawer pulse-drawer pulse-drawer-size-small sc-dwalKd jQPlMK slideRight-app",
+          "core-drawer-wrapper",
+          "core-drawer-mask fadeInStandard-appear-done fadeInStandard-enter-done",
+          "core-drawer-scroll",
+          "core-drawer-header",
+          "core-drawer-header-title",
+          "pulse-drawer-header",
+          "pulse-drawer-header-title-wrap",
+          "pulse-drawer-header-title",
+          "core-icon-hover core-drawer-close-icon",
+          "core-drawer-content",
+          "core-drawer-footer",
+          "pulse-drawer-footer"
+        ],
+        "bodyTail": "polka anime Womenswear & Underwear / Women's Tops / Blouses & Shirts 热门搜索 搜索关键词 3,500 0 查看详情 # Striped Knit Cardigan and Dress Set Womenswear & Underwear / Women's Tops / Blouses & Shirts TikTok 热门商品 热卖榜 3,335 1 查看详情 # Embroidered Cotton Linen Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 全球畅销商品 热卖榜 3,335 1 查看详情 # turtle neck top Womenswear & Underwear / Women's Tops / Blouses & Shirts TikTok 热门商品 搜索关键词 3,333 351 查看详情 # Korean Trendy Roundneck Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 全球畅销商品 热卖榜 3,331 1 查看详情 # Asymmetrical Long Sleeve Bodycon T-Shirt Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,323 1 查看详情 # Cotton Solid Color Button-Up Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,319 1 查看详情 # Casual Korean Chiffon Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,305 1 查看详情 # Slim Knit Striped Casual Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts TikTok 热门商品 热卖榜 3,296 0 查看详情 # Women's Premium Blouse Set Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,291 0 查看详情 机会详情 Striped Knit Cardigan and Dress Set ID 特点： TikTok 热门商品 潜力商品来源： 热卖榜 同类商品发品要求 同类商品参考 品牌 商品状态 库存 无需提供 可售 >0 类目 标题、属性或描述中的关键词 Womenswear & Underwear > Women's Tops > Blouses & Shirts Striped,Knit,Cardigan,and,Dress,Set 机会趋势 提报指南 1. 从店铺中选择现有商品或新增商品。 2. 要提高获批率，请确保商品详情（例如商品标题、属性和描述中的匹配关键词）与该机会高度匹配。 3. 如需查看商品的提报状态，可前往“我的提报”并选择“审核中”查看。 4. 审核通过的商品，可在“已批准”选项卡下“我的提报”中查看商品表现和所获权益。 绑定现有商品 添加同款商品",
+        "inputs": [
+          {
+            "tag": "INPUT",
+            "type": "",
+            "placeholder": "搜索商品名称或关键词",
+            "role": "",
+            "cls": "core-input core-input-size-default",
+            "value": "",
+            "checked": false
+          }
+        ],
+        "checkboxes": [],
+        "buttons": [
+          {
+            "text": "已保存的机会",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": false
+          },
+          {
+            "text": "我的提报(810/11787)",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": false
+          },
+          {
+            "text": "筛选",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": true
+          },
+          {
+            "text": "排序",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": true
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "ID",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "绑定现有商品",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": false
+          },
+          {
+            "text": "添加同款商品",
+            "cls": "core-btn core-btn-primary core-btn-size-default core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          }
+        ],
+        "targetPidMatches": [
+          {
+            "text": "1735873998701954740",
+            "chain": "TD.core-table-td < DIV.core-table-cell < SPAN.core-table-cell-wrap-value < DIV._product_1qwse_87 < DIV._right_1qwse_100 < DIV._subText_1qwse_108"
+          }
+        ]
+      },
+      {
+        "phase": "after-search-typed",
+        "label": "after-search-typed",
+        "drawerCount": 15,
+        "drawerClasses": [
+          "core-drawer-inner",
+          "core-drawer pulse-drawer pulse-drawer-size-small sc-dwalKd cPpLdn",
+          "core-drawer-wrapper",
+          "core-drawer-mask fadeInStandard-appear-done fadeInStandard-enter-done",
+          "core-drawer-scroll",
+          "core-drawer-header",
+          "core-drawer-header-title",
+          "pulse-drawer-header",
+          "pulse-drawer-header-title-wrap",
+          "pulse-drawer-header-title",
+          "pulse-drawer-header-subtitle",
+          "core-icon-hover core-drawer-close-icon",
+          "core-drawer-content",
+          "core-drawer-footer",
+          "pulse-drawer-footer"
+        ],
+        "bodyTail": "Thin Women's Shirt Summer New Design Niche V Half Sleeve Short Sleeve Top Fashion Loose Shirt 女装与女士内衣/女士上装/女士衬衫 1735873998701954740 ₱462.00 - ₱522.00 99,990 [Elastic Satin Includes Neckband] Polo Collar Long-Sleeved Shirt Women's Korean-Style Spring and Autumn Elegant T-shirt Shirt 女装与女士内衣/女士上装/女士衬衫 1735858919516309172 ₱904.00 29,997 European and American Style Women Elegant Hollow Fabric V-neck Patchwork Ruffled Lantern Sleeves Top 8002 女装与女士内衣/女士上装/女士衬衫 1735858737446291124 ₱957.00 49,995 2025 Independent Station Autumn Solid Color Fashion Elegant Long Sleeve Button Shirt Women's Clothing 女装与女士内衣/女士上装/女士衬衫 1735858733080217268 ₱790.00 199,980 V-neck Shirt Women's Summer New Business Suit Shirt Short Sleeve Work Clothes 女装与女士内衣/女士上装/女士衬衫 1735858651755153076 ₱866.00 269,973 2026 New Short Sleeve Sailor Collar Ramie Top Artistic Retro Cotton and Linen Shirt Doll Collar Loose Thin 女装与女士内衣/女士上装/女士衬衫 1735846767319287476 ₱756.00 279,972 High-End 2025 New Summer Wear Striped Three-Quarter Sleeve Shirt Women's Loose Breathable Korean Style Shirt Top 女装与女士内衣/女士上装/女士衬衫 1735846750280058548 ₱497.00 149,985 Women's White Chic Long-Sleeved JK Shirt Spring and Autumn Shirts Inner Wear Base Irregular Cinched Cropped Top 女装与女士内衣/女士上装/女士衬衫 1735846738870503092 ₱667.00 - ₱735.00 179,982 Thin Sun Protection Long Sleeve T-shirt Women's Spring and Summer Simplicity Loose round Neck Pullover Blouse Yellow Top Sun Protective Blouse 女装与女士内衣/女士上装/女士衬衫 1735833162066265780 ₱426.00 129,987 1234 20/页 返回 下一步",
+        "inputs": [
+          {
+            "tag": "INPUT",
+            "type": "",
+            "placeholder": "搜索商品名称或关键词",
+            "role": "",
+            "cls": "core-input core-input-size-default",
+            "value": "",
+            "checked": false
+          },
+          {
+            "tag": "INPUT",
+            "type": "",
+            "placeholder": "搜索商品名称",
+            "role": "",
+            "cls": "core-input core-input-size-default",
+            "value": "1735873998701954740",
+            "checked": false
+          },
+          {
+            "tag": "INPUT",
+            "type": "",
+            "placeholder": "所有类目",
+            "role": "",
+            "cls": "core-cascader-view-input core-cascader-hidden",
+            "value": "",
+            "checked": false
+          },
+          {
+            "tag": "INPUT",
+            "type": "",
+            "placeholder": "",
+            "role": "",
+            "cls": "core-select-view-input core-select-hidden",
+            "value": "20/页",
+            "checked": false
+          }
+        ],
+        "checkboxes": [],
+        "buttons": [
+          {
+            "text": "已保存的机会",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": false
+          },
+          {
+            "text": "我的提报(810/11787)",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": false
+          },
+          {
+            "text": "筛选",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": true
+          },
+          {
+            "text": "排序",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": true
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "返回",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": false
+          },
+          {
+            "text": "下一步",
+            "cls": "core-btn core-btn-primary core-btn-size-default core-btn-shape-square core-btn-d",
+            "hasIcon": false
+          }
+        ],
+        "targetPidMatches": [
+          {
+            "text": "1735873998701954740",
+            "chain": "TD.core-table-td < DIV.core-table-cell < SPAN.core-table-cell-wrap-value < DIV._product_1qwse_87 < DIV._right_1qwse_100 < DIV._subText_1qwse_108"
+          }
+        ]
+      },
+      {
+        "phase": "after-search-results",
+        "label": "after-search-results",
+        "drawerCount": 15,
+        "drawerClasses": [
+          "core-drawer-inner",
+          "core-drawer pulse-drawer pulse-drawer-size-small sc-dwalKd cPpLdn",
+          "core-drawer-wrapper",
+          "core-drawer-mask fadeInStandard-appear-done fadeInStandard-enter-done",
+          "core-drawer-scroll",
+          "core-drawer-header",
+          "core-drawer-header-title",
+          "pulse-drawer-header",
+          "pulse-drawer-header-title-wrap",
+          "pulse-drawer-header-title",
+          "pulse-drawer-header-subtitle",
+          "core-icon-hover core-drawer-close-icon",
+          "core-drawer-content",
+          "core-drawer-footer",
+          "pulse-drawer-footer"
+        ],
+        "bodyTail": "商品机会 已保存的机会 我的提报 (810/11787) 发现 TikTok Shop 上有畅销潜力的商品。 了解更多 将你的畅销商品上架 TikTok Shop，解锁更多增长机会！ 高潜力商品 热门关键词 低竞争类目 热门搜索关键词 筛选 排序 关键词 参考图片 潜在商家来源 搜索次数 在售商品 操作 新品 # kemeja polka anime Womenswear & Underwear / Women's Tops / Blouses & Shirts 热门搜索 搜索关键词 3,500 0 查看详情 # Striped Knit Cardigan and Dress Set Womenswear & Underwear / Women's Tops / Blouses & Shirts TikTok 热门商品 热卖榜 3,335 1 查看详情 # Embroidered Cotton Linen Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 全球畅销商品 热卖榜 3,335 1 查看详情 # turtle neck top Womenswear & Underwear / Women's Tops / Blouses & Shirts TikTok 热门商品 搜索关键词 3,333 351 查看详情 # Korean Trendy Roundneck Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 全球畅销商品 热卖榜 3,331 1 查看详情 # Asymmetrical Long Sleeve Bodycon T-Shirt Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,323 1 查看详情 # Cotton Solid Color Button-Up Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,319 1 查看详情 # Casual Korean Chiffon Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,305 1 查看详情 # Slim Knit Striped Casual Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts TikTok 热门商品 热卖榜 3,296 0 查看详情 # Women's Premium Blouse Set Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,291 0 查看详情 第 1 步：选择商品 选择要提报的商品。 女装与女士内衣 - 女士上装 - 女士衬衫 商品名称 原价 库存 Thin Women's Shirt Summer New Design Niche V Half Sleeve Short Sleeve Top Fashion Loose Shirt 女装与女士内衣/女士上装/女士衬衫 1735873998701954740 ₱462.00 - ₱522.00 99,990 1 20/页 返回 下一步",
+        "inputs": [
+          {
+            "tag": "INPUT",
+            "type": "",
+            "placeholder": "搜索商品名称或关键词",
+            "role": "",
+            "cls": "core-input core-input-size-default",
+            "value": "",
+            "checked": false
+          },
+          {
+            "tag": "INPUT",
+            "type": "",
+            "placeholder": "搜索商品名称",
+            "role": "",
+            "cls": "core-input core-input-size-default",
+            "value": "1735873998701954740",
+            "checked": false
+          },
+          {
+            "tag": "INPUT",
+            "type": "",
+            "placeholder": "所有类目",
+            "role": "",
+            "cls": "core-cascader-view-input core-cascader-hidden",
+            "value": "",
+            "checked": false
+          },
+          {
+            "tag": "INPUT",
+            "type": "",
+            "placeholder": "",
+            "role": "",
+            "cls": "core-select-view-input core-select-hidden",
+            "value": "20/页",
+            "checked": false
+          }
+        ],
+        "checkboxes": [],
+        "buttons": [
+          {
+            "text": "已保存的机会",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": false
+          },
+          {
+            "text": "我的提报(810/11787)",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": false
+          },
+          {
+            "text": "筛选",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": true
+          },
+          {
+            "text": "排序",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": true
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "查看详情",
+            "cls": "core-btn core-btn-secondary core-btn-size-small core-btn-shape-square pulse-butt",
+            "hasIcon": false
+          },
+          {
+            "text": "返回",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu",
+            "hasIcon": false
+          },
+          {
+            "text": "下一步",
+            "cls": "core-btn core-btn-primary core-btn-size-default core-btn-shape-square core-btn-d",
+            "hasIcon": false
+          }
+        ],
+        "targetPidMatches": [
+          {
+            "text": "1735873998701954740",
+            "chain": "TD.core-table-td < DIV.core-table-cell < SPAN.core-table-cell-wrap-value < DIV._product_1qwse_87 < DIV._right_1qwse_100 < DIV._subText_1qwse_108"
+          }
+        ]
+      }
+    ]
+  },
+  "errors": []
+}

@@ -122,6 +122,18 @@ export function BrowserProfileBatchSetTags(arg1, arg2, arg3) {
   return window['go']['main']['App']['BrowserProfileBatchSetTags'](arg1, arg2, arg3);
 }
 
+export function BrowserProfileCredentialDelete(arg1, arg2) {
+  return window['go']['main']['App']['BrowserProfileCredentialDelete'](arg1, arg2);
+}
+
+export function BrowserProfileCredentialList(arg1) {
+  return window['go']['main']['App']['BrowserProfileCredentialList'](arg1);
+}
+
+export function BrowserProfileCredentialSave(arg1, arg2) {
+  return window['go']['main']['App']['BrowserProfileCredentialSave'](arg1, arg2);
+}
+
 export function BrowserProfileCopy(arg1, arg2) {
   return window['go']['main']['App']['BrowserProfileCopy'](arg1, arg2);
 }

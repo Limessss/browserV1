@@ -1,0 +1,46 @@
+{
+  "code": "GMNQ5O",
+  "ok": true,
+  "targetUrl": "https://seller.tiktokshopglobalselling.com/product/opportunity?shop_region=PH&sort_field=1&use_like=false&tab=trending_keywords",
+  "cdpUrl": "http://127.0.0.1:19876",
+  "clickResult": {
+    "rounds": [
+      {
+        "phase": "before-click",
+        "url": "https://seller.tiktokshopglobalselling.com/product/opportunity?shop_region=PH&sort_field=1&use_like=false&tab=trending_keywords",
+        "h1": "商品机会'''''''"
+      },
+      {
+        "phase": "row-scan",
+        "totalRowDivs": 10
+      },
+      {
+        "phase": "row-found",
+        "rowText": "# Cotton Spandex Cross Over BlouseWomenswear & Underwear / Women's Tops / Blouses & Shirts热卖榜4,03548查看详情"
+      },
+      {
+        "phase": "after-click-1.5s",
+        "url": "https://seller.tiktokshopglobalselling.com/product/opportunity?shop_region=PH&sort_field=1&use_like=false&tab=trending_keywords",
+        "h1": "商品机会'''''''"
+      },
+      {
+        "phase": "after-click-5s",
+        "url": "https://seller.tiktokshopglobalselling.com/product/opportunity?shop_region=PH&sort_field=1&use_like=false&tab=trending_keywords",
+        "h1": "商品机会'''''''"
+      },
+      {
+        "phase": "after-click-buttons",
+        "submitLike": [
+          {
+            "text": "我的提报(808/11787)",
+            "cls": "core-btn core-btn-secondary core-btn-size-default core-btn-shape-square pulse-bu"
+          }
+        ],
+        "drawerCount": 2,
+        "modalCount": 1,
+        "bodyTail": "情 # Women's Korean Print Polo Shirt Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,690 6 查看详情 # Vintage Occasion Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts TikTok 热门商品 热卖榜 3,665 5 查看详情 # Plus Size Cotton Lettuce Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,664 5 查看详情 # Cotton Spandex Comfy Shirt Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,663 5 查看详情 机会详情 Cotton Spandex Cross Over Blouse ID 潜力商品来源： 热卖榜 同类商品发品要求 同类商品参考 品牌 商品状态 库存 无需提供 可售 >0 类目 标题、属性或描述中的关键词 Womenswear & Underwear > Women's Tops > Blouses & Shirts Cotton,Spandex,Cross,Over,Blouse 机会趋势 提报指南 1. 从店铺中选择现有商品或新增商品。 2. 要提高获批率，请确保商品详情（例如商品标题、属性和描述中的匹配关键词）与该机会高度匹配。 3. 如需查看商品的提报状态，可前往“我的提报”并选择“审核中”查看。 4. 审核通过的商品，可在“已批准”选项卡下“我的提报”中查看商品表现和所获权益。 绑定现有商品 添加同款商品"
+      }
+    ]
+  },
+  "errors": []
+}

@@ -121,7 +121,7 @@ export function BrowserSettingsModal({ open, onClose, settings: initSettings, co
             <Card padding="none"><Table columns={coreColumns} data={cores} rowKey="coreId" /></Card>
           </div>
           <FormItem label="用户数据根目录">
-            <Input value={settings.userDataRoot} onChange={e => setSettings(p => ({ ...p, userDataRoot: e.target.value }))} placeholder="data" />
+            <Input value={settings.userDataRoot} onChange={e => setSettings(p => ({ ...p, userDataRoot: e.target.value }))} placeholder="profiles" />
           </FormItem>
           <FormItem label="默认指纹参数（每行一个）">
             <Textarea value={fingerprintText} onChange={e => setFingerprintText(e.target.value)} rows={3} placeholder="--fingerprint-brand=Chrome" />

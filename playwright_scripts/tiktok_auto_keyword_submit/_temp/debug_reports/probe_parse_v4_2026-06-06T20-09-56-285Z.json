@@ -1,0 +1,10 @@
+{
+  "code": "GMNQ5O",
+  "ok": false,
+  "targetUrl": "https://seller.tiktokshopglobalselling.com/product/opportunity?shop_region=PH&sort_field=1&use_like=false&tab=trending_keywords",
+  "cdpUrl": "http://127.0.0.1:19876",
+  "parsed": null,
+  "errors": [
+    "page.evaluate: SyntaxError: Invalid or unexpected token\n    at eval (<anonymous>)\n    at UtilityScript.evaluate (<anonymous>:302:30)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)"
+  ]
+}

@@ -25,14 +25,15 @@ import { allocateLocalPort } from './net-utils'
 import { listBookmarksResolved } from './bookmark-list-resolve'
 import { ensureDefaultBookmarks } from './ensure-default-bookmarks'
 import { resolveProfileUserDataDir } from './profile-paths'
-import { loadBrowserSettingsMerged, loadProxyBridgeBinaryPaths } from './app-config-store'
+import { loadBrowserSettingsMerged, loadProxyBridgeBinaryPaths, loadProxyIsolationEnabled } from './app-config-store'
 import { normalizeProxyForChrome } from './proxy'
 import {
   acquireProxyBridgeForProfile,
   formatBridgeErrorForWarning,
-  proxyNeedsBridge,
+  shouldUseProxyBridge,
   releaseProxyBridgeForProfile,
 } from './proxy-bridge-service'
+import { envWithoutSystemProxy } from './proxy-spawn-env'
 import {
   cdpBrowserCall,
   cdpBrowserCommandWithResult,
@@ -44,6 +45,7 @@ import {
   clearLaunchServerActiveProfile,
   setLaunchServerActiveProfile,
 } from './launch-server-state'
+import { startProfileAutofill, stopProfileAutofill } from './autofill-cdp-service'
 
 function resolveEffectiveProxyBinding(db: Database, profileId: string): { proxyConfig: string; dnsServers: string } {
   const row = getProfileRow(db, profileId)
@@ -78,13 +80,19 @@ function hasFingerprintFlag(args: string[]): boolean {
   return args.some((a) => a.startsWith('--fingerprint='))
 }
 
-function buildChromeProxyArgs(effectiveProxy: string): string[] {
+function buildChromeProxyArgs(effectiveProxy: string, isolateFromSystemProxy = false): string[] {
   const p = effectiveProxy.trim()
-  if (!p) return []
+  if (!p) {
+    return isolateFromSystemProxy ? ['--proxy-server=direct://'] : []
+  }
   if (p.toLowerCase() === 'direct://') {
     return ['--proxy-server=direct://']
   }
-  return [`--proxy-server=${p}`]
+  const args = [`--proxy-server=${p}`]
+  if (isolateFromSystemProxy && p.includes('127.0.0.1')) {
+    args.push('--proxy-bypass-list=<-loopback>')
+  }
+  return args
 }
 
 function enrichProxyWarning(rawWarning: string): string {
@@ -165,6 +173,7 @@ function waitBrowserDebugReadyAsync(profileId: string, debugPort: number, timeou
       if (!p) return
       mergeRuntimeIntoProfileRecord(p)
       emitWailsEvent('browser:instance:updated', browserInstanceEventPayload(p, false))
+      startProfileAutofill(id, debugPort)
     } catch {
       /* keep pending state */
     }
@@ -360,10 +369,17 @@ export async function browserInstanceStart(
 
   const proxyBinding = resolveEffectiveProxyBinding(db, id)
   const effectiveProxy = proxyBinding.proxyConfig
+  const isolateInstanceProxy = loadProxyIsolationEnabled()
+  const bridgeOptions = { isolateFromSystemProxy: isolateInstanceProxy }
   let resolvedProxy = normalizeProxyForChrome(effectiveProxy)
-  if (proxyNeedsBridge(effectiveProxy)) {
+  if (shouldUseProxyBridge(effectiveProxy, bridgeOptions)) {
     try {
-      const bridge = await acquireProxyBridgeForProfile(id, effectiveProxy, proxyBinding.dnsServers)
+      const bridge = await acquireProxyBridgeForProfile(
+        id,
+        effectiveProxy,
+        proxyBinding.dnsServers,
+        bridgeOptions,
+      )
       if (bridge.proxyServer) {
         resolvedProxy = { proxyServer: bridge.proxyServer, warning: '' }
       }
@@ -374,6 +390,8 @@ export async function browserInstanceStart(
         warning: `${resolvedProxy.warning}；${msg}`.trim(),
       }
     }
+  } else if (isolateInstanceProxy && !effectiveProxy.trim()) {
+    resolvedProxy = { proxyServer: 'direct://', warning: '' }
   }
 
   const debugPort = await allocateLocalPort()
@@ -401,7 +419,9 @@ export async function browserInstanceStart(
   }
 
   if (resolvedProxy.proxyServer) {
-    args.push(...buildChromeProxyArgs(resolvedProxy.proxyServer))
+    args.push(...buildChromeProxyArgs(resolvedProxy.proxyServer, isolateInstanceProxy))
+  } else if (isolateInstanceProxy) {
+    args.push(...buildChromeProxyArgs('direct://', true))
   }
   args.push(...fpArgs)
   args.push(...launchArgs)
@@ -416,11 +436,13 @@ export async function browserInstanceStart(
     detached: false,
     stdio: 'ignore',
     windowsHide: false,
+    env: isolateInstanceProxy ? envWithoutSystemProxy() : process.env,
   })
 
   const pid = child.pid ?? 0
 
   child.once('exit', (code, signal) => {
+    stopProfileAutofill(id, debugPort)
     const graceful = consumeGracefulBrowserStop(id)
     releaseProxyBridgeForProfile(id)
     clearBrowserRuntime(id)
@@ -504,6 +526,7 @@ export async function browserInstanceStart(
       cur.runtimeWarning = ''
       registerBrowserRuntime(id, cur)
     }
+    startProfileAutofill(id, debugPort)
     const refreshed = getProfileFrontendById(db, id)
     if (refreshed) {
       mergeRuntimeIntoProfileRecord(refreshed)
@@ -549,6 +572,7 @@ export async function browserInstanceStop(db: Database, profileId: string): Prom
   }
 
   markGracefulBrowserStop(id)
+  stopProfileAutofill(id, entry.debugPort)
 
   if (entry.debugPort > 0) {
     try {

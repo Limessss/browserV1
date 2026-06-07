@@ -10,14 +10,20 @@ import { HttpsProxyAgent } from 'https-proxy-agent'
 import { SocksProxyAgent } from 'socks-proxy-agent'
 
 import { listProxies } from './browser-data'
+import { loadProxyIsolationEnabled } from './app-config-store'
 import { persistSqlite } from './database/sqlite-store'
 import { proxyTcpTarget } from './proxy-endpoint'
 import {
   acquireProxyBridgeForProfile,
   formatBridgeErrorForWarning,
-  proxyNeedsBridge,
+  shouldUseProxyBridge,
   releaseProxyBridgeForProfile,
+  type ProxyBridgeOptions,
 } from './proxy-bridge-service'
+
+function currentProxyBridgeOptions(): ProxyBridgeOptions {
+  return { isolateFromSystemProxy: loadProxyIsolationEnabled() }
+}
 
 export type ProxyTestResult = {
   proxyId: string
@@ -373,11 +379,17 @@ export async function testProxyConnectivity(
 
   let effectiveSrc = src
   let tempBridgeProfileId = ''
+  const bridgeOptions = currentProxyBridgeOptions()
   try {
-    if (proxyNeedsBridge(src)) {
+    if (shouldUseProxyBridge(src, bridgeOptions)) {
       tempBridgeProfileId = `proxy-test:${pid || 'temp'}:${Date.now()}`
       try {
-        const bridge = await acquireProxyBridgeForProfile(tempBridgeProfileId, src, binding.dnsServers)
+        const bridge = await acquireProxyBridgeForProfile(
+          tempBridgeProfileId,
+          src,
+          binding.dnsServers,
+          bridgeOptions,
+        )
         if (bridge.proxyServer) {
           effectiveSrc = bridge.proxyServer
         }
@@ -415,11 +427,17 @@ export async function testProxyRealConnectivity(db: Database, proxyId: string): 
   let proxyUrl: string | null = src
   let tempBridgeProfileId = ''
   const start = Date.now()
+  const bridgeOptions = currentProxyBridgeOptions()
   try {
-    if (proxyNeedsBridge(src)) {
+    if (shouldUseProxyBridge(src, bridgeOptions)) {
       tempBridgeProfileId = `proxy-real-test:${pid || 'temp'}:${Date.now()}`
       try {
-        const bridge = await acquireProxyBridgeForProfile(tempBridgeProfileId, src, binding.dnsServers)
+        const bridge = await acquireProxyBridgeForProfile(
+          tempBridgeProfileId,
+          src,
+          binding.dnsServers,
+          bridgeOptions,
+        )
         proxyUrl = bridge.proxyServer || null
       } catch (e) {
         return baseResult(pid, false, 0, formatBridgeErrorForWarning(e))
@@ -526,10 +544,16 @@ export async function browserProxyCheckIPHealth(
 
   let bridgeRef = ''
   let proxyUrl: string | null = src
+  const bridgeOptions = currentProxyBridgeOptions()
   try {
-    if (proxyNeedsBridge(src)) {
+    if (shouldUseProxyBridge(src, bridgeOptions)) {
       bridgeRef = `proxy-ippure:${pid || 'temp'}:${Date.now()}`
-      const bridge = await acquireProxyBridgeForProfile(bridgeRef, src, binding.dnsServers)
+      const bridge = await acquireProxyBridgeForProfile(
+        bridgeRef,
+        src,
+        binding.dnsServers,
+        bridgeOptions,
+      )
       proxyUrl = bridge.proxyServer || null
     }
     if (!proxyUrl || proxyUrl.toLowerCase() === 'direct://') {
@@ -558,7 +582,7 @@ export async function browserProxyCheckIPHealth(
     persistIPHealthResult(db, pid, result)
     return result
   } catch (e) {
-    const bridgeMode = proxyNeedsBridge(src)
+    const bridgeMode = shouldUseProxyBridge(src, bridgeOptions)
     const msg = bridgeMode ? formatBridgeErrorForWarning(e) : (e instanceof Error ? e.message : String(e))
     const result: ProxyIPHealthResult = {
       proxyId: pid,

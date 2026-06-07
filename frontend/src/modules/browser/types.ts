@@ -43,6 +43,37 @@ export interface BrowserProfileInput {
   defaultStartUrls?: string[]
 }
 
+export interface ProfileCredential {
+  credentialId: string
+  profileId: string
+  label: string
+  siteHost: string
+  urlPattern: string
+  username: string
+  password: string
+  usernameSelector: string
+  passwordSelector: string
+  autoSubmit: boolean
+  enabled: boolean
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProfileCredentialInput {
+  credentialId?: string
+  label?: string
+  siteHost: string
+  urlPattern?: string
+  username: string
+  password?: string
+  usernameSelector?: string
+  passwordSelector?: string
+  autoSubmit?: boolean
+  enabled?: boolean
+  sortOrder?: number
+}
+
 export interface BrowserTab {
   tabId: string
   title: string
@@ -57,6 +88,18 @@ export interface BrowserSettings {
   defaultProxy: string
   startReadyTimeoutMs: number
   startStableWindowMs: number
+  /** 实例代理与系统/全局代理隔离（默认关闭） */
+  isolateInstanceProxy: boolean
+}
+
+export const defaultBrowserSettingsValue: BrowserSettings = {
+  userDataRoot: 'profiles',
+  defaultFingerprintArgs: ['--fingerprint-brand=Chrome', '--fingerprint-platform=windows'],
+  defaultLaunchArgs: ['--disable-sync', '--no-first-run'],
+  defaultProxy: '',
+  startReadyTimeoutMs: 3000,
+  startStableWindowMs: 1200,
+  isolateInstanceProxy: false,
 }
 
 export interface BrowserCore {

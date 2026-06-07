@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.17",
-    "bufferutil": "^4.1.0",
     "clsx": "^2.1.1",
     "electron-updater": "^6.6.2",
     "http-proxy": "^1.18.1",
@@ -40,7 +39,6 @@
     "remark-gfm": "^4.0.0",
     "socks-proxy-agent": "^10.0.0",
     "sql.js": "^1.13.0",
-    "utf-8-validate": "^6.0.6",
     "ws": "^8.20.0",
     "zustand": "^5.0.3"
   },
@@ -54,7 +52,7 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react-swc": "^4.3.0",
     "autoprefixer": "^10.4.21",
-    "electron": "^34.5.8",
+    "electron": "^35.7.5",
     "electron-builder": "^26.8.1",
     "electron-vite": "^3.1.0",
     "postcss": "^8.5.3",
@@ -66,7 +64,7 @@
     "vite": "^6.2.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "build": {
     "appId": "com.nexbrowser.desktop",
@@ -87,6 +85,7 @@
       "**/*.node",
       "**/*.wasm"
     ],
+    "npmRebuild": false,
     "extraResources": [
       {
         "from": "build/icon.png",

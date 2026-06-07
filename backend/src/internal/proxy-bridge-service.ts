@@ -11,6 +11,12 @@ import { allocateLocalPort } from './net-utils'
 import { getAppStateRoot, loadProxyBridgeBinaryPaths } from './app-config-store'
 import { decodeBase64Text, getMapInt, getMapString, parseClashPayload, pickClashNode } from './clash-import'
 import { emitWailsEvent } from '../ipc/wails-emit'
+import { envWithoutSystemProxy, resolvePhysicalNetworkInterface } from './proxy-spawn-env'
+
+export type ProxyBridgeOptions = {
+  /** 为 true 时 http/socks5 也走本地桥接，且出站尽量绑物理网卡 */
+  isolateFromSystemProxy?: boolean
+}
 
 type BridgeEntry = {
   key: string
@@ -201,16 +207,122 @@ async function waitBridgePortReady(
   throw new Error(`桥接端口未就绪: 127.0.0.1:${port}`)
 }
 
-function isNativeProxy(source: string): boolean {
+function isNativeUpstreamProxy(source: string): boolean {
   const low = source.toLowerCase()
   return (
-    !source ||
-    low === 'direct://' ||
     low.startsWith('http://') ||
     low.startsWith('https://') ||
     low.startsWith('socks5://') ||
     low.startsWith('socks5h://')
   )
+}
+
+function isNativeProxy(source: string): boolean {
+  const low = source.toLowerCase()
+  return (
+    !source ||
+    low === 'direct://' ||
+    isNativeUpstreamProxy(source)
+  )
+}
+
+function parseNativeProxyAuth(u: URL): { user: string; pass: string } | null {
+  const user = decodeURIComponent(String(u.username ?? '').trim())
+  const pass = decodeURIComponent(String(u.password ?? '').trim())
+  if (!user && !pass) {
+    return null
+  }
+  return { user, pass: pass || '' }
+}
+
+function defaultNativeProxyPort(protocol: string): number {
+  const p = protocol.toLowerCase()
+  if (p === 'socks5:' || p === 'socks5h:') {
+    return 1080
+  }
+  if (p === 'https:') {
+    return 443
+  }
+  return 80
+}
+
+function buildNativeProxyPlan(source: string): BridgePlan {
+  const raw = source.trim()
+  const low = raw.toLowerCase()
+  let u: URL
+  try {
+    u = new URL(raw)
+  } catch {
+    throw new Error('原生代理 URL 解析失败')
+  }
+  const host = String(u.hostname ?? '').trim()
+  const port = u.port ? Number(u.port) : defaultNativeProxyPort(u.protocol)
+  if (!host || !Number.isFinite(port) || port <= 0) {
+    throw new Error('原生代理 host/port 无效')
+  }
+  const auth = parseNativeProxyAuth(u)
+  if (low.startsWith('socks5://') || low.startsWith('socks5h://')) {
+    return {
+      engine: 'xray',
+      outbound: {
+        protocol: 'socks',
+        tag: 'proxy-out',
+        settings: {
+          servers: [
+            {
+              address: host,
+              port,
+              ...(auth ? { users: [auth] } : {}),
+            },
+          ],
+        },
+      },
+    }
+  }
+  return {
+    engine: 'xray',
+    outbound: {
+      protocol: 'http',
+      tag: 'proxy-out',
+      settings: {
+        servers: [
+          {
+            address: host,
+            port,
+            ...(auth ? { users: [auth] } : {}),
+          },
+        ],
+      },
+    },
+  }
+}
+
+function applyOutboundInterfaceBinding(
+  outbound: Record<string, unknown>,
+  engine: BridgeEngine,
+  bindInterface: string,
+): Record<string, unknown> {
+  const iface = bindInterface.trim()
+  if (!iface) {
+    return outbound
+  }
+  const out = { ...outbound }
+  if (engine === 'xray') {
+    const stream = { ...(ensureObject(out.streamSettings as Record<string, unknown>)) }
+    stream.sockopt = {
+      ...(ensureObject(stream.sockopt as Record<string, unknown>)),
+      interface: iface,
+      domainStrategy: 'AsIs',
+    }
+    out.streamSettings = stream
+    return out
+  }
+  out.bind_interface = iface
+  return out
+}
+
+function ensureObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
 }
 
 function makeNodeKey(source: string): string {
@@ -946,11 +1058,15 @@ function writeXrayRuntimeConfig(
   port: number,
   outbound: Record<string, unknown>,
   dnsServers: string,
+  bindInterface = '',
 ): BridgeRunFiles {
   const base = join(bridgeWorkRoot(), key)
   mkdirSync(base, { recursive: true })
   const configPath = join(base, 'xray-config.json')
   const errorLogPath = join(base, 'bridge-stderr.log')
+  const effectiveOutbound = bindInterface
+    ? applyOutboundInterfaceBinding(outbound, 'xray', bindInterface)
+    : outbound
   const payload = {
     log: { loglevel: 'warning', error: errorLogPath },
     inbounds: [
@@ -963,7 +1079,7 @@ function writeXrayRuntimeConfig(
       },
     ],
     outbounds: [
-      outbound,
+      effectiveOutbound,
       { protocol: 'direct', tag: 'direct' },
       { protocol: 'blackhole', tag: 'block' },
     ],
@@ -980,11 +1096,15 @@ function writeSingBoxRuntimeConfig(
   key: string,
   port: number,
   outbound: Record<string, unknown>,
+  bindInterface = '',
 ): BridgeRunFiles {
   const base = join(bridgeWorkRoot(), key)
   mkdirSync(base, { recursive: true })
   const configPath = join(base, 'sing-box-config.json')
   const stderrPath = join(base, 'bridge-stderr.log')
+  const effectiveOutbound = bindInterface
+    ? applyOutboundInterfaceBinding(outbound, 'sing-box', bindInterface)
+    : outbound
   const payload = {
     log: { level: 'warn' },
     inbounds: [
@@ -996,7 +1116,7 @@ function writeSingBoxRuntimeConfig(
       },
     ],
     outbounds: [
-      outbound,
+      effectiveOutbound,
       { type: 'direct', tag: 'direct' },
       { type: 'block', tag: 'block' },
     ],
@@ -1093,17 +1213,33 @@ export function proxyNeedsBridge(rawProxy: string): boolean {
   )
 }
 
+/** 是否应启用本地代理网关（含系统代理隔离模式下的原生 http/socks5） */
+export function shouldUseProxyBridge(rawProxy: string, options?: ProxyBridgeOptions): boolean {
+  if (proxyNeedsBridge(rawProxy)) {
+    return true
+  }
+  if (!options?.isolateFromSystemProxy) {
+    return false
+  }
+  const source = normalizeProxySource(rawProxy)
+  if (!source || source.toLowerCase() === 'direct://') {
+    return false
+  }
+  return isNativeUpstreamProxy(source)
+}
+
 export async function acquireProxyBridgeForProfile(
   profileId: string,
   rawProxy: string,
   dnsServers = '',
+  options?: ProxyBridgeOptions,
 ): Promise<{ proxyServer: string; warning: string }> {
   const source = normalizeProxySource(rawProxy)
-  if (!proxyNeedsBridge(source)) {
+  if (!shouldUseProxyBridge(source, options)) {
     return { proxyServer: '', warning: '' }
   }
 
-  const key = makeNodeKey(source)
+  const key = makeNodeKey(`${source}|isolate=${options?.isolateFromSystemProxy ? '1' : '0'}`)
   const current = bridges.get(key)
   if (current && current.child.exitCode === null && current.child.signalCode === null) {
     current.refCount++
@@ -1122,12 +1258,15 @@ export async function acquireProxyBridgeForProfile(
     bridges.delete(key)
   }
 
-  const plan = buildPlanFromProxy(source)
+  const plan = isNativeUpstreamProxy(source)
+    ? buildNativeProxyPlan(source)
+    : buildPlanFromProxy(source)
   const port = await allocateLocalPort()
+  const bindInterface = options?.isolateFromSystemProxy ? resolvePhysicalNetworkInterface() : ''
   const runFiles =
     plan.engine === 'xray'
-      ? writeXrayRuntimeConfig(key, port, plan.outbound, dnsServers)
-      : writeSingBoxRuntimeConfig(key, port, plan.outbound)
+      ? writeXrayRuntimeConfig(key, port, plan.outbound, dnsServers, bindInterface)
+      : writeSingBoxRuntimeConfig(key, port, plan.outbound, bindInterface)
   const binary = resolveBridgeBinaryPath(plan.engine)
   console.info('[Bridge] spawn', {
     profileId: profileId.trim(),
@@ -1140,6 +1279,7 @@ export async function acquireProxyBridgeForProfile(
     windowsHide: true,
     stdio: ['ignore', 'ignore', 'pipe'],
     detached: false,
+    env: options?.isolateFromSystemProxy ? envWithoutSystemProxy() : process.env,
   })
   const startupErrorRef: { error: Error | null } = { error: null }
   child.once('error', (err) => {

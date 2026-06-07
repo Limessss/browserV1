@@ -11,6 +11,7 @@ import {
   type PlaywrightScriptMeta,
   type PlaywrightScriptsListPayload,
   openPlaywrightScriptPath,
+  openPlaywrightScriptsDir,
   savePlaywrightScriptManifestApi,
 } from '../api'
 
@@ -73,6 +74,17 @@ export function PlaywrightScriptsPage() {
   const closeEditModal = () => {
     if (savingManifest) return
     setEditingScript(null)
+  }
+
+  const handleOpenScriptsDir = async () => {
+    try {
+      const ok = await openPlaywrightScriptsDir()
+      if (!ok) {
+        toast.error('当前环境不支持打开目录')
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '打开脚本目录失败')
+    }
   }
 
   const handleOpenScriptPath = async (relativePath: string) => {
@@ -240,28 +252,32 @@ export function PlaywrightScriptsPage() {
             <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[var(--color-accent-muted)] text-[var(--color-accent)] text-xs font-medium mb-3">
               <Terminal className="w-3.5 h-3.5" /> 自动化脚本
             </div>
-            <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Playwright 脚本目录</h1>
-            <p className="text-sm text-[var(--color-text-secondary)] mt-2">
-              读取仓库内 <code className="text-xs">playwright_scripts/*/script.json</code>
-              ，一键用系统 Node 执行入口 <code className="text-xs">.mjs</code>（工作目录为应用根目录，与 README 中命令一致）。
-            </p>
-            {payload.rootDir ? (
-              <p className="text-xs text-[var(--color-text-muted)] mt-2 break-all space-y-1">
-                <span className="block">
-                  用户脚本目录（优先）：<code>{payload.rootDir}</code>
-                </span>
-                {payload.bundledRootDir ? (
-                  <span className="block">
-                    安装包内置：<code>{payload.bundledRootDir}</code>
-                  </span>
-                ) : null}
-              </p>
-            ) : null}
+            <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Playwright 脚本说明</h1>
+            <ol className="text-sm text-[var(--color-text-secondary)] mt-2 space-y-1.5 list-decimal pl-5">
+              <li>
+                系统会扫描 <code className="text-xs">脚本目录下的所有脚本</code>，在此一键运行。
+              </li>
+              <li>
+                若要修改或自行创建脚本，请打开脚本目录，并让 AI Agent 工具阅读该目录下的{' '}
+                <code className="text-xs">README.md</code> 后再动手。
+              </li>
+            </ol>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => void loadList()} disabled={loading}>
-            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
-            刷新列表
-          </Button>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void handleOpenScriptsDir()}
+              title="在资源管理器中打开用户脚本目录 playwright_scripts"
+            >
+              <FolderOpen className="w-3.5 h-3.5 mr-1.5" />
+              打开脚本目录
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => void loadList()} disabled={loading}>
+              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+              刷新列表
+            </Button>
+          </div>
         </div>
       </Card>
 
@@ -396,7 +412,8 @@ export function PlaywrightScriptsPage() {
         </pre>
         <p className="text-[10px] text-[var(--color-text-muted)] mt-2">
           打包后内置脚本在 <code>playwright_scripts.bundled</code>；首次运行会将缺失文件复制到用户目录{' '}
-          <code>playwright_scripts</code>（不覆盖已有文件）。同名文件以用户目录为准。
+          <code>playwright_scripts</code>（不覆盖已有文件）。同名文件以用户目录为准。修改或新建脚本前，请让 AI Agent
+          阅读用户目录中的 <code>README.md</code>。
         </p>
       </Card>
 

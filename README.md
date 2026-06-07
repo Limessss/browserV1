@@ -13,7 +13,7 @@
 
 ## 环境
 
-- Node.js ≥ 20
+- Node.js ≥ 22（开发与 Playwright 脚本运行时一致；打包后通过 Electron 35+ 内置 Node 22 执行脚本）
 
 ## 安装与启动
 

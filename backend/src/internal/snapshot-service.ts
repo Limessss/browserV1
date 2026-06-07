@@ -16,8 +16,8 @@ import {
 import { dirname, join, relative, resolve } from 'node:path'
 import type { Database } from 'sql.js'
 
-import { resolveAppRelativePath } from './electron-paths'
 import { isProfileRunning } from './browser-runtime-store'
+import { resolveSnapshotsRootAbs } from './browser-user-data-paths'
 import { resolveProfileUserDataDir } from './profile-paths'
 
 const require = createRequire(import.meta.url)
@@ -42,7 +42,7 @@ export interface SnapshotInfo {
 }
 
 function snapshotDirForProfile(profileId: string): string {
-  const dir = join(resolveAppRelativePath('data'), 'snapshots', profileId)
+  const dir = join(resolveSnapshotsRootAbs(), profileId)
   mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -182,7 +182,7 @@ export function browserSnapshotRestore(
   }
 
   const userDataDir = resolveProfileUserDataDir(db, profileId)
-  const snapDir = join(resolveAppRelativePath('data'), 'snapshots', profileId)
+  const snapDir = join(resolveSnapshotsRootAbs(), profileId)
   const { zipPath } = findSnapshotFiles(snapDir, snapshotId)
 
   rmSync(userDataDir, { recursive: true, force: true })
@@ -191,7 +191,7 @@ export function browserSnapshotRestore(
 }
 
 export function browserSnapshotDelete(profileId: string, snapshotId: string): void {
-  const snapDir = join(resolveAppRelativePath('data'), 'snapshots', profileId)
+  const snapDir = join(resolveSnapshotsRootAbs(), profileId)
   const { metaPath, zipPath } = findSnapshotFiles(snapDir, snapshotId)
   try {
     unlinkSync(zipPath)

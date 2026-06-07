@@ -1,0 +1,17 @@
+{
+  "code": "GMNQ5O",
+  "ok": true,
+  "targetUrl": "https://seller.tiktokshopglobalselling.com/product/opportunity?shop_region=PH&sort_field=1&use_like=false&tab=trending_keywords",
+  "cdpUrl": "http://127.0.0.1:19876",
+  "refreshResult": {
+    "rounds": [
+      {
+        "phase": "post-error-fallback",
+        "trCount": 1,
+        "markbuttonCount": 0,
+        "bodyTail": "nderwear / Women's Tops / Blouses & Shirts\n全球畅销商品\n热卖榜\n3,695\n6\n查看详情\n# Oversized Batwing Crop Top\nWomenswear & Underwear / Women's Tops / Blouses & Shirts\n热卖榜\n3,692\n6\n查看详情\n# Women's Korean Print Polo Shirt\nWomenswear & Underwear / Women's Tops / Blouses & Shirts\n热卖榜\n3,690\n6\n查看详情\n# Vintage Occasion Blouse\nWomenswear & Underwear / Women's Tops / Blouses & Shirts\nTikTok 热门商品\n热卖榜\n3,665\n5\n查看详情\n# Plus Size Cotton Lettuce Blouse\nWomenswear & Underwear / Women's Tops / Blouses & Shirts\n热卖榜\n3,664\n5\n查看详情\n# Cotton Spandex Comfy Shirt\nWomenswear & Underwear / Women's Tops / Blouses & Shirts\n热卖榜\n3,663\n5\n查看详情"
+      }
+    ]
+  },
+  "errors": []
+}

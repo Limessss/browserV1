@@ -1,4 +1,5 @@
-import type { BrowserProfile, BrowserProfileInput, BrowserTab, BrowserSettings, BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserProxy, BrowserCoreExtended, CookieInfo, SnapshotInfo, BrowserBookmark, BrowserGroup, BrowserGroupInput, BrowserGroupWithCount, ProxyIPHealthResult } from './types'
+import type { BrowserProfile, BrowserProfileInput, BrowserTab, BrowserSettings, BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserProxy, BrowserCoreExtended, CookieInfo, SnapshotInfo, BrowserBookmark, BrowserGroup, BrowserGroupInput, BrowserGroupWithCount, ProxyIPHealthResult, ProfileCredential, ProfileCredentialInput } from './types'
+import { defaultBrowserSettingsValue } from './types'
 
 const getBindings = async () => {
   try {
@@ -6,6 +7,20 @@ const getBindings = async () => {
   } catch {
     return null
   }
+}
+
+/** preload 动态注册的方法优先；wailsjs 未刷新时仍可调用 */
+async function callAppMethodOrThrow(method: string, ...args: unknown[]): Promise<unknown> {
+  const goApp = (window as Window & { go?: { main?: { App?: Record<string, (...a: unknown[]) => Promise<unknown>> } } })
+    .go?.main?.App
+  if (typeof goApp?.[method] === 'function') {
+    return goApp[method](...args)
+  }
+  const bindings: any = await getBindings()
+  if (typeof bindings?.[method] === 'function') {
+    return bindings[method](...args)
+  }
+  throw new Error(`后端接口不可用: ${method}`)
 }
 
 let mockProfiles: BrowserProfile[] = [
@@ -108,6 +123,25 @@ export async function deleteBrowserProfile(profileId: string): Promise<boolean> 
   return true
 }
 
+export async function fetchProfileCredentials(profileId: string): Promise<ProfileCredential[]> {
+  return ((await callAppMethodOrThrow('BrowserProfileCredentialList', profileId)) as ProfileCredential[]) || []
+}
+
+export async function saveProfileCredential(
+  profileId: string,
+  input: ProfileCredentialInput,
+): Promise<ProfileCredential> {
+  const saved = (await callAppMethodOrThrow('BrowserProfileCredentialSave', profileId, input)) as ProfileCredential | null
+  if (!saved) {
+    throw new Error('保存凭据失败')
+  }
+  return saved
+}
+
+export async function deleteProfileCredential(profileId: string, credentialId: string): Promise<void> {
+  await callAppMethodOrThrow('BrowserProfileCredentialDelete', profileId, credentialId)
+}
+
 export async function copyBrowserProfile(profileId: string, newName: string): Promise<BrowserProfile | null> {
   const bindings: any = await getBindings()
   if (bindings?.BrowserProfileCopy) {
@@ -205,9 +239,9 @@ export async function fetchBrowserTabs(profileId: string): Promise<BrowserTab[]>
 export async function fetchBrowserSettings(): Promise<BrowserSettings> {
   const bindings: any = await getBindings()
   if (bindings?.GetBrowserSettings) {
-    return (await bindings.GetBrowserSettings()) || { userDataRoot: 'data', defaultFingerprintArgs: [], defaultLaunchArgs: [], defaultProxy: '', startReadyTimeoutMs: 3000, startStableWindowMs: 1200 }
+    return { ...defaultBrowserSettingsValue, ...(await bindings.GetBrowserSettings()) }
   }
-  return { userDataRoot: 'data', defaultFingerprintArgs: [], defaultLaunchArgs: [], defaultProxy: '', startReadyTimeoutMs: 3000, startStableWindowMs: 1200 }
+  return { ...defaultBrowserSettingsValue }
 }
 
 export async function saveBrowserSettings(settings: BrowserSettings): Promise<boolean> {
@@ -497,6 +531,20 @@ export async function openCorePath(corePath: string): Promise<boolean> {
     return true
   }
   return false
+}
+
+export async function openPlaywrightScriptsDir(): Promise<boolean> {
+  const bindings: any = await getBindings()
+  if (bindings?.OpenPlaywrightScriptsDir) {
+    await bindings.OpenPlaywrightScriptsDir()
+    return true
+  }
+  const goApp = (window as any).go?.main?.App
+  if (goApp?.OpenPlaywrightScriptsDir) {
+    await goApp.OpenPlaywrightScriptsDir()
+    return true
+  }
+  return openCorePath('playwright_scripts')
 }
 
 export async function openPlaywrightScriptPath(folderId: string, relativePath?: string): Promise<boolean> {

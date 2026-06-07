@@ -8,6 +8,7 @@ import { FingerprintPanel } from '../components/FingerprintPanel'
 import { TagInput } from '../components/TagInput'
 import { GroupSelector } from '../components/GroupSelector'
 import { ProxyPickerModal } from '../components/ProxyPickerModal'
+import { ProfileCredentialsPanel } from '../components/ProfileCredentialsPanel'
 
 const fallbackLowLaunchArgs = ['--disable-sync', '--no-first-run']
 
@@ -207,6 +208,21 @@ export function BrowserEditPage() {
         </div>
       </Card>
 
+      <Card title="默认启动网址" subtitle="每行一个 URL；填写后启动本实例将只打开这些页面，不再打开系统自带的 IP 检测页。留空则仍使用系统默认检测站">
+        <Textarea
+          value={defaultStartUrlsText}
+          onChange={e => { setDefaultStartUrlsText(e.target.value); setIsDirty(true) }}
+          rows={5}
+          placeholder="https://example.com/"
+        />
+      </Card>
+
+      {!isCreate && id ? (
+        <Card title="网站账号（自动填充）" subtitle="实例运行中访问匹配域名的登录页时，自动填入账号密码">
+          <ProfileCredentialsPanel profileId={id} />
+        </Card>
+      ) : null}
+
       <Card title="代理配置" subtitle="选择代理池中的代理或手动输入">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormItem label="代理池选择">
@@ -265,15 +281,6 @@ export function BrowserEditPage() {
             <p className="text-xs text-[var(--color-text-muted)]">这里默认就是轻量参数模板；需要更复杂的参数，直接在此基础上修改。</p>
           )}
         </div>
-      </Card>
-
-      <Card title="默认启动网址" subtitle="每行一个 URL；填写后启动本实例将只打开这些页面，不再打开系统自带的 IP 检测页。留空则仍使用系统默认检测站">
-        <Textarea
-          value={defaultStartUrlsText}
-          onChange={e => { setDefaultStartUrlsText(e.target.value); setIsDirty(true) }}
-          rows={5}
-          placeholder="https://example.com/"
-        />
       </Card>
 
       <ConfirmModal

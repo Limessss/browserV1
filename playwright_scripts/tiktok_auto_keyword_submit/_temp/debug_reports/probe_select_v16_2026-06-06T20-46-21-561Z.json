@@ -1,0 +1,63 @@
+{
+  "code": "GMNQ5O",
+  "ok": true,
+  "targetUrl": "https://seller.tiktokshopglobalselling.com/product/opportunity?shop_region=PH&sort_field=1&use_like=false&tab=trending_keywords",
+  "cdpUrl": "http://127.0.0.1:19876",
+  "selectResult": {
+    "rounds": [
+      {
+        "phase": "after-bind-click",
+        "buttons": 39
+      },
+      {
+        "phase": "search-input-found",
+        "placeholder": "搜索商品名称"
+      },
+      {
+        "phase": "after-search",
+        "bodyTail": " 3,702 6 查看详情 # Striped Lapel Women's Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,698 6 查看详情 # Assorted Casual Clothing Tops & Bottoms Womenswear & Underwear / Women's Tops / Blouses & Shirts 全球畅销商品 热卖榜 3,695 6 查看详情 # Oversized Batwing Crop Top Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,692 6 查看详情 # Women's Korean Print Polo Shirt Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,690 6 查看详情 # Vintage Occasion Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts TikTok 热门商品 热卖榜 3,665 5 查看详情 # Plus Size Cotton Lettuce Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,664 5 查看详情 # Cotton Spandex Comfy Shirt Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,663 5 查看详情 第 1 步：选择商品 选择要提报的商品。 女装与女士内衣 - 女士上装 - 女士衬衫 商品名称 原价 库存 Thin Women's Shirt Summer New Design Niche V Half Sleeve Short Sleeve Top Fashion Loose Shirt 女装与女士内衣/女士上装/女士衬衫 1735873998701954740 ₱462.00 - ₱522.00 99,990 1 20/页 返回 下一步"
+      },
+      {
+        "phase": "match-row-found",
+        "rowText": "Thin Women's Shirt Summer New Design Niche V Half Sleeve Short Sleeve Top Fashion Loose Shirt女装与女士内衣/女士上装/女士衬衫1735873998701954740₱462.00 - ₱522.0099,990"
+      },
+      {
+        "phase": "checkbox-found",
+        "type": "INPUT",
+        "checked": false
+      },
+      {
+        "phase": "after-checkbox-click",
+        "checked": true
+      },
+      {
+        "phase": "after-next",
+        "buttons": [
+          "已保存的机会",
+          "我的提报(808/11787)",
+          "筛选",
+          "排序",
+          "查看详情",
+          "查看详情",
+          "查看详情",
+          "查看详情",
+          "查看详情",
+          "查看详情",
+          "查看详情",
+          "查看详情",
+          "查看详情",
+          "查看详情",
+          "Cotton",
+          "Spandex",
+          "Cross",
+          "Over",
+          "Blouse",
+          "返回",
+          "提交"
+        ],
+        "bodyTail": " 联系客户经理 商品机会 ' ' ' ' ' ' ' 商品机会 已保存的机会 我的提报 (808/11787) 发现 TikTok Shop 上有畅销潜力的商品。 了解更多 热门搜索提醒：根据顾客的搜索内容上架符合需求的商品！ 高潜力商品 热门关键词 低竞争类目 热门搜索关键词 筛选 排序 关键词 参考图片 潜在商家来源 搜索次数 在售商品 操作 # Cotton Spandex Cross Over Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 4,035 48 查看详情 # Double-Lining Cotton Spandex Top Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,708 6 查看详情 # Assorted Print Teen to Adult Shorts Bundle Womenswear & Underwear / Women's Tops / Blouses & Shirts TikTok 热门商品 热卖榜 3,702 6 查看详情 # Striped Lapel Women's Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,698 6 查看详情 # Assorted Casual Clothing Tops & Bottoms Womenswear & Underwear / Women's Tops / Blouses & Shirts 全球畅销商品 热卖榜 3,695 6 查看详情 # Oversized Batwing Crop Top Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,692 6 查看详情 # Women's Korean Print Polo Shirt Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,690 6 查看详情 # Vintage Occasion Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts TikTok 热门商品 热卖榜 3,665 5 查看详情 # Plus Size Cotton Lettuce Blouse Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,664 5 查看详情 # Cotton Spandex Comfy Shirt Womenswear & Underwear / Women's Tops / Blouses & Shirts 热卖榜 3,663 5 查看详情 第 2 步：添加关键词 提交前，请确保你已获得品牌授权，以避免商品下架。TikTok Shop 对任何侵权行为均不承担责任。 商品 Thin Women's Shirt Summer New Design Niche V Half Sleeve Short Sleeve Top Fashion Loose Shirt 推荐关键词 93/255 Cotton Spandex Cross Over Blouse 1 返回 提交"
+      }
+    ]
+  },
+  "errors": []
+}

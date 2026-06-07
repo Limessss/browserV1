@@ -122,6 +122,29 @@ export const migrations: Migration[] = [
     desc: '实例表添加默认启动网址（JSON 数组）',
     stmts: [`ALTER TABLE browser_profiles ADD COLUMN default_start_urls TEXT NOT NULL DEFAULT '[]'`],
   },
+  {
+    version: 8,
+    desc: '实例网站账号凭据（自动填充）',
+    stmts: [
+      `CREATE TABLE IF NOT EXISTS browser_profile_credentials (
+				credential_id      TEXT PRIMARY KEY,
+				profile_id         TEXT NOT NULL,
+				label              TEXT NOT NULL DEFAULT '',
+				site_host          TEXT NOT NULL,
+				url_pattern        TEXT NOT NULL DEFAULT '',
+				username           TEXT NOT NULL,
+				password_enc       TEXT NOT NULL,
+				username_selector  TEXT NOT NULL DEFAULT '',
+				password_selector  TEXT NOT NULL DEFAULT '',
+				auto_submit        INTEGER NOT NULL DEFAULT 0,
+				enabled            INTEGER NOT NULL DEFAULT 1,
+				sort_order         INTEGER NOT NULL DEFAULT 0,
+				created_at         TEXT NOT NULL,
+				updated_at         TEXT NOT NULL
+			)`,
+      `CREATE INDEX IF NOT EXISTS idx_profile_credentials_profile ON browser_profile_credentials(profile_id)`,
+    ],
+  },
 ]
 
 function isDuplicateColumnError(err: unknown): boolean {

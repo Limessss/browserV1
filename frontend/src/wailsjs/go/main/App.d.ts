@@ -67,6 +67,12 @@ export function BrowserProfileBatchRemoveTags(arg1:Array<string>,arg2:Array<stri
 
 export function BrowserProfileBatchSetTags(arg1:Array<string>,arg2:Array<string>,arg3:boolean):Promise<void>;
 
+export function BrowserProfileCredentialDelete(arg1:string,arg2:string):Promise<void>;
+
+export function BrowserProfileCredentialList(arg1:string):Promise<Array<Record<string, any>>>;
+
+export function BrowserProfileCredentialSave(arg1:string,arg2:Record<string, any>):Promise<Record<string, any>>;
+
 export function BrowserProfileCopy(arg1:string,arg2:string):Promise<browser.Profile>;
 
 export function BrowserProfileCreate(arg1:browser.ProfileInput):Promise<browser.Profile>;

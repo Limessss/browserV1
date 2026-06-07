@@ -14,6 +14,7 @@ import {
   regenerateLaunchCode,
   setLaunchCode,
 } from './launch-code-service'
+import { deleteAllProfileCredentials } from './profile-credential-service'
 import { persistSqlite } from './database/sqlite-store'
 import { defaultBrowserSettings, loadBrowserSettingsMerged } from './app-config-store'
 
@@ -380,6 +381,7 @@ export function browserProfileDelete(db: Database, profileId: string): void {
     throw new Error('profile not found')
   }
   deleteLaunchCode(db, profileId)
+  deleteAllProfileCredentials(db, profileId)
   db.run(`DELETE FROM browser_profiles WHERE profile_id = ?`, [profileId])
   persistSqlite()
 }
