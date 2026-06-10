@@ -14,7 +14,8 @@ import { initSqlite, getSqlite } from '../internal/database/sqlite-store'
 import { initElectronPaths } from '../internal/electron-paths'
 import { registerIpcHandlers } from '../ipc/register-handlers'
 import { attachCloseConfirmation } from '../ipc/window-close-guard'
-import { startLaunchHttpServer } from '../internal/launch-http-server'
+import { startLaunchHttpServer, getLaunchHttpServer, setLiveBridgeUpgradeHandler } from '../internal/launch-http-server'
+import { startLiveBridge, stopLiveBridge, handleLiveBridgeUpgrade } from '../internal/live-bridge-server'
 import { forceQuitCleanup } from '../internal/force-quit-cleanup'
 import { resetQuitMode, shouldStopRuntimeServicesOnQuit } from '../internal/quit-mode'
 import { installAppLogBridge } from '../internal/app-runtime-service'
@@ -122,7 +123,12 @@ app.whenReady().then(async () => {
   await initSqlite(app)
   migrateLegacyBrowserUserData(getSqlite())
   logBrowserDataPaths(getSqlite())
-  void startLaunchHttpServer().catch((e) => console.error('[LaunchServer]', e))
+  void startLaunchHttpServer().then(() => {
+    if (startLiveBridge()) {
+      setLiveBridgeUpgradeHandler(handleLiveBridgeUpgrade)
+      console.log('[LiveBridge] WS endpoint ready at ws://127.0.0.1:19876/api/live-bridge')
+    }
+  }).catch((e) => console.error('[LaunchServer]', e))
   registerIpcHandlers({ getWindow })
   mainWindow = createWindow()
   await initTray(getWindow)

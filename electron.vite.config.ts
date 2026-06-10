@@ -14,6 +14,15 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: resolve(rootDir, 'backend/src/main/index.ts'),
+        external: [
+          'playwright',
+          'playwright-core',
+          'chromium-bidi',
+          /^chromium-bidi\//,
+          'ws',
+          'bufferutil',
+          'utf-8-validate',
+        ],
       },
       outDir: resolve(rootDir, 'dist-electron/main'),
     },

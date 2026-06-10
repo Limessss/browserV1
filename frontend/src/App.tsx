@@ -42,6 +42,10 @@ const PlaywrightScriptsPage = lazyNamed(
   () => import('./modules/browser/pages/PlaywrightScriptsPage'),
   'PlaywrightScriptsPage',
 )
+const LiveBridgePage = lazyNamed(
+  () => import('./modules/browser/pages/LiveBridgePage'),
+  'LiveBridgePage',
+)
 const UsageTutorialPage = lazyNamed(() => import('./modules/browser/pages/UsageTutorialPage'), 'UsageTutorialPage')
 const QuickLaunchModal = lazyNamed(() => import('./modules/browser/components/QuickLaunchModal'), 'QuickLaunchModal')
 
@@ -284,6 +288,7 @@ function App() {
               <Route path="/browser/bookmarks" element={<BookmarkSettingsPage />} />
               <Route path="/browser/automation/scripts" element={<PlaywrightScriptsPage />} />
               <Route path="/browser/automation" element={<AutomationPage />} />
+              <Route path="/browser/live-bridge" element={<LiveBridgePage />} />
               <Route path="/browser/launch-api" element={<LaunchApiDocsPage />} />
               <Route path="/browser/tags" element={<TagManagementPage />} />
               <Route path="/system/tutorial" element={<UsageTutorialPage />} />

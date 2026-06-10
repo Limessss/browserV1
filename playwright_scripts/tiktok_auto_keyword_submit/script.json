@@ -5,9 +5,9 @@
   "entry": "tiktok_auto_keyword_submit.mjs",
   "order": 50,
   "tags": ["playwright", "tiktok", "shop", "opportunity", "keyword", "submit", "erp"],
-  "version": "0.7.0",
-  "defaultArgs": ["--useLaunchApi", "--code", "GMNQ5O", "--shop_region", "PH", "--dryRun", "--limit", "3"],
-  "argsHint": "必传 --useLaunchApi 或 --cdp；--code 默认 GMNQ5O；--shop_region 默认 PH；--topN 默认 5；--limit 默认 50。ERP 凭证顺序：env ERP_API_KEY/ERP_API_BASE → --erpKey/--erpBase → Launch GET /api/integrations/linkeoo-erp。去掉 --dryRun 会真实 DOM 提报。",
+  "version": "0.9.2",
+  "defaultArgs": ["--useLaunchApi", "--code", "GMNQ5O", "--shop_region", "PH", "--limit", "3"],
+  "argsHint": "必传 --useLaunchApi 或 --cdp；--code 默认 GMNQ5O；--shop_region 支持单码 / 逗号分隔 / JSON 数组（与 tiktok_compass_top10_random5_ai_video 一致），如 --shop_region 'PH' 或 'PH,MY' 或 '[\"PH\",\"MY\"]'，依次独立跑每个 region；--topN 默认 5；--limit 默认 50（不传则按默认值 50）。ERP 凭证顺序：env ERP_API_KEY/ERP_API_BASE → --erpKey/--erpBase → Launch GET /api/integrations/linkeoo-erp。**默认 dryRun=false（真实 DOM 提报）**；只验证不提交请加 --dryRun。v0.9 新增：--db <path> 持久化去重（默认 .data/submissions.sqlite，UNIQUE(lead_name, product_id, shop_id, region) WHERE status='submitted'）；--reset-db 清空；--strict-dryrun 把 dryRun 也算入去重集（用于预演去重效果）。v0.9.1 新增：每个 region 内部关键节点（shop_id/ERP/lead/list/每条 lead/每 product 提交）会调 showPageToast 弹 3 秒页面提示；最后一个 region 跑完后弹汇总 modal。",
   "requiresLaunchServer": true,
   "mcpDoc": "mcp_tiktok_auto_keyword_submit.md"
 }

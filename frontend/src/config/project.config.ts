@@ -46,6 +46,7 @@ export const navigationConfig: NavSection[] = [
     items: [
       { name: '自动化脚本', path: '/browser/automation/scripts', icon: 'Terminal' },
       { name: '自动化接口（实验）', path: '/browser/automation', icon: 'Bot' },
+      { name: '实时浏览器接管', path: '/browser/live-bridge', icon: 'Activity' },
     ]
   },
   {

@@ -104,6 +104,22 @@ let httpListenPort = 0
 let httpServer: http.Server | null = null
 let launchLogs: LaunchCallRecord[] = []
 
+let liveBridgeHandler: ((req: IncomingMessage, socket: Socket, head: Buffer) => void) | null = null
+
+/**
+ * 实时桥 (Live Bridge) 通过本函数挂一个 WS upgrade handler。
+ * 路径 /api/live-bridge -> liveBridgeHandler；非 /api/ 路径 (CDP 流量) -> 原有 cdpProxy.ws
+ */
+export function setLiveBridgeUpgradeHandler(
+  handler: ((req: IncomingMessage, socket: Socket, head: Buffer) => void) | null,
+): void {
+  liveBridgeHandler = handler
+}
+
+export function getLaunchHttpServer(): http.Server | null {
+  return httpServer
+}
+
 const cdpProxy = httpProxy.createProxyServer({
   ws: true,
   xfwd: false,
@@ -433,29 +449,41 @@ function handlePlaywrightScriptKill(res: ServerResponse, runId: string): void {
 }
 
 function attachLaunchUpgradeHandler(server: http.Server): void {
-  server.on('upgrade', (req, socket: Socket, head) => {
-    const host = remoteIp(socket.remoteAddress ?? '')
-    if (host !== '127.0.0.1' && host !== '::1') {
-      socket.destroy()
-      return
-    }
-    const url = req.url ?? '/'
-    if (url.startsWith('/api/')) {
-      socket.destroy()
-      return
-    }
-    const target = getLaunchServerActiveTarget()
-    if (target.debugPort <= 0) {
-      socket.destroy()
-      return
-    }
-    const dst = `http://127.0.0.1:${target.debugPort}`
-    try {
-      cdpProxy.ws(req, socket, head, { target: dst })
-    } catch {
-      socket.destroy()
-    }
-  })
+ server.on('upgrade', (req, socket: Socket, head) => {
+ const host = remoteIp(socket.remoteAddress ?? '')
+ if (host !== '127.0.0.1' && host !== '::1') {
+ socket.destroy()
+ return
+ }
+ const url = req.url ?? '/'
+ if (url.startsWith('/api/live-bridge')) {
+ if (!liveBridgeHandler) {
+ socket.destroy()
+ return
+ }
+ try {
+ liveBridgeHandler(req, socket, head as Buffer)
+ } catch {
+ socket.destroy()
+ }
+ return
+ }
+ if (url.startsWith('/api/')) {
+ socket.destroy()
+ return
+ }
+ const target = getLaunchServerActiveTarget()
+ if (target.debugPort <=0) {
+ socket.destroy()
+ return
+ }
+ const dst = `http://127.0.0.1:${target.debugPort}`
+ try {
+ cdpProxy.ws(req, socket, head, { target: dst })
+ } catch {
+ socket.destroy()
+ }
+ })
 }
 
 async function tryListenOnServer(server: http.Server, port: number): Promise<boolean> {

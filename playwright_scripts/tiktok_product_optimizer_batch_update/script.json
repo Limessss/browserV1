@@ -6,8 +6,8 @@
   "order": 45,
   "tags": ["playwright", "tiktok", "shop", "product", "optimizer"],
   "version": "1.0.0",
-  "defaultArgs": ["--useLaunchApi", "--code", "IKXSD8", "--shop_region", "MY", "--dryRun"],
-  "argsHint": "--shop_region 支持单个、逗号分隔或 JSON 数组；默认 MY。去掉 --dryRun 会真实循环点击“更新 N 件商品”。可用 --max_update_batches 限制最大批次数。",
+  "defaultArgs": ["--useLaunchApi", "--code", "IKXSD8", "--shop_region", "[\"MY\"]", "--dryRun"],
+  "argsHint": "--shop_region 使用 JSON 数组依次执行，如 '[\"MY\",\"PH\"]'。去掉 --dryRun 会真实循环点击“更新 N 件商品”。可用 --max_update_batches 限制每轮最大批次数，--max_optimize_rounds 限制重新进入批量优化流程的轮数，--max_runtime_ms 限制总时长。",
   "requiresLaunchServer": true,
   "mcpDoc": "mcp_tiktok_product_optimizer_batch_update.md"
 }

@@ -8,6 +8,8 @@ const DEFAULT_AUTH_HEADER = process.env.LAUNCH_API_AUTH_HEADER || 'X-Ant-Api-Key
 const DEFAULT_AUTH_KEY = process.env.LAUNCH_API_KEY || ''
 const DEBUG_READY_RETRY = 35
 const DEBUG_READY_INTERVAL_MS = 1000
+const PAGE_TOAST_MS = 3000
+const PAGE_TOAST_DOM_ID = 'ant-playwright-product-optimizer-toast'
 
 function getArgValue(flagName) {
   const idx = process.argv.indexOf(flagName)
@@ -32,6 +34,10 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function isRuntimeExpired(options) {
+  return Boolean(options.deadlineAtMs && Date.now() >= options.deadlineAtMs)
+}
+
 function parseShopRegions(raw) {
   const s = String(raw || '').trim()
   if (!s) return ['MY']
@@ -41,6 +47,12 @@ function parseShopRegions(raw) {
     try {
       parsed = JSON.parse(s)
     } catch {
+      const looseCodes = s
+        .slice(1, s.endsWith(']') ? -1 : undefined)
+        .split(',')
+        .map((x) => x.trim().replace(/^['"]|['"]$/g, ''))
+        .filter(Boolean)
+      if (looseCodes.length) return looseCodes
       throw new Error('Failed to parse --shop_region JSON array, for example: --shop_region \'["MY","PH"]\'')
     }
     if (!Array.isArray(parsed)) throw new Error('--shop_region JSON value must be an array')
@@ -194,6 +206,98 @@ async function safeBodyPreview(page) {
   }
 }
 
+async function showPageToast(page, message) {
+  const msg = String(message || '').slice(0, 600)
+  try {
+    await page.evaluate(
+      ({ text, ms, rootId }) => {
+        const prev = document.getElementById(rootId)
+        if (prev) prev.remove()
+
+        const sid = 'ant-playwright-product-optimizer-toast-styles'
+        if (!document.getElementById(sid)) {
+          const st = document.createElement('style')
+          st.id = sid
+          st.textContent = `
+@keyframes ant-pw-product-toast-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ant-pw-product-toast-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(10px); }
+}
+`
+          document.head.appendChild(st)
+        }
+
+        const root = document.createElement('div')
+        root.id = rootId
+        root.style.cssText = [
+          'position:fixed',
+          'bottom:0',
+          'left:0',
+          'right:0',
+          'z-index:2147483646',
+          'pointer-events:none',
+          'display:flex',
+          'justify-content:center',
+          'align-items:flex-end',
+          'padding:0 14px 12px',
+          'box-sizing:border-box',
+          'font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+          'font-size:13px',
+          'line-height:1.5',
+        ].join(';')
+
+        const row = document.createElement('div')
+        row.style.cssText = [
+          'max-width:min(620px,92vw)',
+          'display:flex',
+          'align-items:stretch',
+          'border-radius:12px 12px 0 0',
+          'overflow:hidden',
+          'box-shadow:0 -10px 36px rgba(0,0,0,.42),0 0 0 1px rgba(255,255,255,.08)',
+          'animation:ant-pw-product-toast-in 0.32s cubic-bezier(.22,1,.36,1) both',
+        ].join(';')
+
+        const stripe = document.createElement('div')
+        stripe.style.cssText = 'width:5px;flex-shrink:0;background:linear-gradient(180deg,#2dd4bf,#6366f1);'
+
+        const bar = document.createElement('div')
+        bar.style.cssText = [
+          'flex:1',
+          'background:linear-gradient(145deg,rgba(32,32,40,.98),rgba(20,20,26,.99))',
+          'color:#f4f4f8',
+          'padding:12px 18px',
+          'text-align:center',
+          'word-break:break-word',
+          'font-weight:500',
+        ].join(';')
+        bar.textContent = text
+
+        row.appendChild(stripe)
+        row.appendChild(bar)
+        root.appendChild(row)
+        document.body.appendChild(root)
+
+        window.setTimeout(() => {
+          row.style.animation = 'ant-pw-product-toast-out 0.28s ease forwards'
+          window.setTimeout(() => root.remove(), 280)
+        }, ms)
+      },
+      { text: msg, ms: PAGE_TOAST_MS, rootId: PAGE_TOAST_DOM_ID },
+    )
+  } catch {
+    // Ignore while the page is navigating.
+  }
+}
+
+async function logProgress(page, message) {
+  console.log(message)
+  if (page) await showPageToast(page, message)
+}
+
 async function clickFirstVisibleLocator(locator, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs
   let lastError = null
@@ -313,6 +417,16 @@ async function updateProductsUntilDone(page, options) {
   let lastResult = null
 
   for (let batchIndex = 1; batchIndex <= options.maxUpdateBatches; batchIndex += 1) {
+    if (isRuntimeExpired(options)) {
+      return {
+        ok: batches.length > 0,
+        batches,
+        lastResult,
+        totalProductCount: batches.reduce((sum, item) => sum + (Number(item.productCount) || 0), 0),
+        stopReason: 'max_runtime_ms_reached',
+      }
+    }
+
     const updateResult = await clickUpdateProducts(page, {
       dryRun: options.dryRun,
       timeoutMs: options.updateButtonTimeoutMs,
@@ -341,6 +455,10 @@ async function updateProductsUntilDone(page, options) {
       clicked: updateResult.clicked,
       dryRun: updateResult.dryRun,
     })
+    await logProgress(
+      page,
+      `${options.logPrefix || ''} batch ${batchIndex}: ${updateResult.clicked ? 'clicked' : 'located'} ${updateResult.text}`,
+    )
 
     if (options.dryRun) {
       return {
@@ -374,6 +492,7 @@ async function runForRegion(page, shopRegion, options) {
     batchOptimize: null,
     updateProducts: null,
     updateBatches: [],
+    optimizeRounds: [],
     totalProductCount: 0,
     stopReason: '',
     finalUrl: '',
@@ -381,34 +500,99 @@ async function runForRegion(page, shopRegion, options) {
   }
 
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: options.navigationTimeoutMs })
-    await page.waitForLoadState('networkidle', { timeout: options.networkIdleTimeoutMs }).catch(() => {})
-    await sleep(options.waitMs)
+    for (let roundIndex = 1; roundIndex <= options.maxOptimizeRounds; roundIndex += 1) {
+      if (isRuntimeExpired(options)) {
+        result.stopReason = 'max_runtime_ms_reached'
+        result.ok = result.optimizeRounds.some((item) => item.updateBatches.length > 0)
+        break
+      }
 
-    if (/\/account\/login/i.test(page.url())) {
-      result.error = 'TikTok Shop login is required for this browser profile'
-      result.bodyPreview = await safeBodyPreview(page)
-      result.finalUrl = page.url()
-      return result
+      await logProgress(page, `[${shopRegion}] optimize round ${roundIndex}/${options.maxOptimizeRounds}`)
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: options.navigationTimeoutMs })
+      await page.waitForLoadState('networkidle', { timeout: options.networkIdleTimeoutMs }).catch(() => {})
+      await sleep(options.waitMs)
+
+      if (/\/account\/login/i.test(page.url())) {
+        result.error = 'TikTok Shop login is required for this browser profile'
+        result.bodyPreview = await safeBodyPreview(page)
+        result.finalUrl = page.url()
+        return result
+      }
+
+      const batchOptimize = await clickBatchOptimize(page)
+      result.batchOptimize = batchOptimize
+      if (!batchOptimize?.ok) {
+        await logProgress(page, `[${shopRegion}] batch optimize button not found`)
+        result.bodyPreview = await safeBodyPreview(page)
+        result.finalUrl = page.url()
+        result.stopReason = result.optimizeRounds.length ? 'batch_optimize_button_not_found_after_rounds' : ''
+        result.ok = result.optimizeRounds.length > 0
+        return result
+      }
+
+      await sleep(options.afterBatchClickMs)
+      const updateSummary = await updateProductsUntilDone(page, {
+        ...options,
+        logPrefix: `[${shopRegion}] round ${roundIndex}`,
+      })
+      const round = {
+        roundIndex,
+        batchOptimize,
+        updateProducts: updateSummary.lastResult,
+        updateBatches: updateSummary.batches,
+        totalProductCount: updateSummary.totalProductCount,
+        stopReason: updateSummary.stopReason,
+        ok: updateSummary.ok,
+      }
+      result.optimizeRounds.push(round)
+      result.updateProducts = updateSummary.lastResult
+      result.updateBatches.push(
+        ...updateSummary.batches.map((batch) => ({
+          ...batch,
+          roundIndex,
+        })),
+      )
+      result.totalProductCount += updateSummary.totalProductCount
+      result.stopReason = updateSummary.stopReason
+
+      if (options.dryRun) {
+        result.ok = Boolean(batchOptimize?.ok && updateSummary.ok)
+        break
+      }
+
+      if (!updateSummary.ok) {
+        result.ok = result.optimizeRounds.some((item) => item.updateBatches.length > 0)
+        break
+      }
+
+      const roundHadUpdates = updateSummary.batches.length > 0
+      if (!roundHadUpdates) {
+        await logProgress(page, `[${shopRegion}] no updates after reopen`)
+        result.ok = true
+        result.stopReason = 'no_updates_after_reopen'
+        break
+      }
+
+      const noMoreInCurrentFlow = ['no_update_button_found', 'no_more_products'].includes(updateSummary.stopReason)
+      const shouldTryNextRound = noMoreInCurrentFlow && roundIndex < options.maxOptimizeRounds
+      if (!shouldTryNextRound) {
+        result.ok = Boolean(batchOptimize?.ok && updateSummary.ok)
+        if (noMoreInCurrentFlow && roundHadUpdates && roundIndex >= options.maxOptimizeRounds) {
+          result.stopReason = `max_optimize_rounds_reached_${options.maxOptimizeRounds}`
+        }
+        break
+      }
+
+      await sleep(options.afterOptimizeRoundMs)
     }
 
-    result.batchOptimize = await clickBatchOptimize(page)
-    if (!result.batchOptimize?.ok) {
-      result.bodyPreview = await safeBodyPreview(page)
-      result.finalUrl = page.url()
-      return result
+    if (!result.stopReason && result.optimizeRounds.length >= options.maxOptimizeRounds) {
+      result.stopReason = `max_optimize_rounds_reached_${options.maxOptimizeRounds}`
     }
-
-    await sleep(options.afterBatchClickMs)
-    const updateSummary = await updateProductsUntilDone(page, options)
-    result.updateProducts = updateSummary.lastResult
-    result.updateBatches = updateSummary.batches
-    result.totalProductCount = updateSummary.totalProductCount
-    result.stopReason = updateSummary.stopReason
 
     result.finalUrl = page.url()
     result.bodyPreview = await safeBodyPreview(page)
-    result.ok = Boolean(result.batchOptimize?.ok && updateSummary.ok)
+    result.ok = Boolean(result.ok || result.optimizeRounds.some((item) => item.updateBatches.length > 0))
     return result
   } catch (err) {
     result.error = err?.message || String(err)
@@ -421,13 +605,18 @@ async function runForRegion(page, shopRegion, options) {
 async function main() {
   const shopRegions = parseShopRegions(getArgValue('--shop_region'))
   const dryRun = hasFlag('--dryRun')
+  const maxRuntimeMs = getNumberArg('--max_runtime_ms', 0)
   const options = {
     dryRun,
     waitMs: getNumberArg('--wait_ms', 1500),
     afterBatchClickMs: getNumberArg('--after_batch_click_ms', 1200),
     afterUpdateClickMs: getNumberArg('--after_update_click_ms', 2500),
+    afterOptimizeRoundMs: getNumberArg('--after_optimize_round_ms', 1500),
     updateButtonTimeoutMs: getNumberArg('--update_button_timeout_ms', 60000),
     maxUpdateBatches: getNumberArg('--max_update_batches', 100),
+    maxOptimizeRounds: getNumberArg('--max_optimize_rounds', 1),
+    maxRuntimeMs,
+    deadlineAtMs: maxRuntimeMs > 0 ? Date.now() + maxRuntimeMs : 0,
     navigationTimeoutMs: getNumberArg('--navigation_timeout_ms', 60000),
     networkIdleTimeoutMs: getNumberArg('--network_idle_timeout_ms', 12000),
   }
@@ -440,7 +629,11 @@ async function main() {
   const results = []
   try {
     for (const shopRegion of shopRegions) {
-      console.log(`[${shopRegion}] open product optimizer and ${dryRun ? 'locate' : 'click'} batch update`)
+      await logProgress(
+        page,
+        `[${shopRegion}] open product optimizer and ${dryRun ? 'locate' : 'click'} batch update` +
+          (options.maxOptimizeRounds > 1 ? ` for up to ${options.maxOptimizeRounds} optimize rounds` : ''),
+      )
       results.push(await runForRegion(page, shopRegion, options))
     }
   } finally {

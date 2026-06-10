@@ -21,6 +21,8 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.17",
+    "bufferutil": "^4.1.0",
+    "chromium-bidi": "^16.0.1",
     "clsx": "^2.1.1",
     "electron-updater": "^6.6.2",
     "http-proxy": "^1.18.1",
@@ -39,6 +41,7 @@
     "remark-gfm": "^4.0.0",
     "socks-proxy-agent": "^10.0.0",
     "sql.js": "^1.13.0",
+    "utf-8-validate": "^6.0.6",
     "ws": "^8.20.0",
     "zustand": "^5.0.3"
   },
@@ -83,7 +86,13 @@
     "asar": true,
     "asarUnpack": [
       "**/*.node",
-      "**/*.wasm"
+      "**/*.wasm",
+      "node_modules/ws/**/*",
+      "node_modules/bufferutil/**/*",
+      "node_modules/utf-8-validate/**/*",
+      "node_modules/ws/**/*",
+      "node_modules/bufferutil/**/*",
+      "node_modules/utf-8-validate/**/*"
     ],
     "npmRebuild": false,
     "extraResources": [
@@ -117,6 +126,34 @@
       {
         "from": "node_modules/playwright-core",
         "to": "node_modules/playwright-core",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "node_modules/chromium-bidi",
+        "to": "node_modules/chromium-bidi",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "node_modules/ws",
+        "to": "node_modules/ws",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "node_modules/bufferutil",
+        "to": "node_modules/bufferutil",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "node_modules/utf-8-validate",
+        "to": "node_modules/utf-8-validate",
         "filter": [
           "**/*"
         ]

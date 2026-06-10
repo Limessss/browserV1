@@ -5,6 +5,7 @@ import { browserInstanceStop } from './browser-instance-service'
 import { listRunningProfileIds } from './browser-runtime-store'
 import { persistSqlite, getSqlite } from './database/sqlite-store'
 import { stopLaunchHttpServer } from './launch-http-server'
+import { stopLiveBridge } from './live-bridge-server'
 import { stopAllAutofillSessions } from './autofill-cdp-service'
 import { stopAllProxyBridges } from './proxy-bridge-service'
 import { killResidualRuntimeProcesses } from './residual-process-cleanup'
@@ -29,6 +30,7 @@ export async function forceQuitCleanup(): Promise<void> {
       persistSqlite()
     }
     await stopLaunchHttpServer()
+    await stopLiveBridge()
     stopAllAutofillSessions()
     await stopAllProxyBridges()
     try {
