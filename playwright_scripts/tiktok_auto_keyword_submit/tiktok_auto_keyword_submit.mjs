@@ -689,13 +689,40 @@ async function run() {
     if (!report.allLeads.length) throw new Error('lead/list 未返回任何 lead')
 
     // 4) 限制 + 逐个走 ERP search_by_keyword + DOM 提报
-    const limitedLeads = report.allLeads.slice(0, keywordLimit)
+    // v0.8 改进：每条 lead 提报前**从当前页面真实可见的 div.core-table-tr 取首条**——而不是按 lead/list API 固定顺序。
+    // 这样保证每条 lead 都在新页面可视 13 行内。
+    const limitedLeads = []  // 不再 pre-collect，循环里按需取
     report.limitedLeads = limitedLeads
-    logStep(`limited=${limitedLeads.length}, dryRun=${dryRun}`)
+    logStep(`limit=${keywordLimit}, dryRun=${dryRun}`)
     await showPageToast(page, `[脚本] 开始自动关键词提报（${limitedLeads.length} 个，dryRun=${dryRun ? '是' : '否'}）`)
 
-    for (let i = 0; i < limitedLeads.length; i += 1) {
-      const lead = limitedLeads[i]
+    for (let i = 0; i < keywordLimit; i += 1) {
+      // v0.8：从当前页面真实可见的 div.core-table-tr 取首条未提报的 lead
+      // （绕过 lead/list API 固定列表顺序——它不可靠）
+      const discovered = await page.evaluate(() => {
+        const compact = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+        const rows = Array.from(document.querySelectorAll('div.core-table-tr')).filter((el) => {
+          const r = el.getBoundingClientRect();
+          const st = window.getComputedStyle(el);
+          return r.width > 0 && r.height > 0 && st.visibility !== 'hidden' && st.display !== 'none';
+        });
+        const out = [];
+        for (const tr of rows) {
+          const text = compact(tr.textContent);
+          if (text.includes('已提报') || text.includes('审核中') || text.includes('已批准') || text.includes('已驳回')) continue;
+          const m = text.match(/^#\s*([^\n]+?)(?=Womenswear|Menswear|全球|$)/);
+          if (m) out.push(m[1].trim());
+        }
+        return out.slice(0, 30);
+      })
+      const leadName = discovered[0] || ''
+      if (!leadName) {
+        logStep(`  (${i + 1}/${keywordLimit}) 页面找不到任何 lead 行（全部提报过），结束`)
+        break
+      }
+      const lead = { lead_id: `discovered-${i}`, lead_name: leadName }
+      limitedLeads.push(lead)
+      logStep(`(${i + 1}/${keywordLimit}) lead_name="${lead.lead_name}" (自动发现)`)
       const row = { lead_id: lead.lead_id, lead_name: lead.lead_name, status: 'pending', items: 0, success: 0, error: '' }
       try {
         logStep(`(${i + 1}/${limitedLeads.length}) lead_name="${lead.lead_name}" lead_id=${lead.lead_id}`)
@@ -777,6 +804,18 @@ async function run() {
           row.status = 'submitted'
         }
         row.success = submittedCount
+        report.rows.push(row)
+        // 真实提报后：goto 重新加载 trending_keywords，让 discovered[0] 在新一轮指向"新的首条"
+        // 不重新加载时，TikTok React 状态不会切，已提报 lead 仍可能出现在 DOM 里
+        if (!dryRun && i + 1 < keywordLimit) {
+          logStep(`  → 重新加载 trending_keywords 让 discovered[0] 切到下一条 (${i + 2}/${keywordLimit})`)
+          try {
+            await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: navTimeoutMs })
+            await sleep(waitMs)
+          } catch (e) {
+            logStep(`  → 重新加载失败: ${e instanceof Error ? e.message : String(e)}`)
+          }
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         row.error = msg
