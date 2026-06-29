@@ -65,6 +65,29 @@ node playwright_scripts/tiktok_compass_top10_random5_ai_video/tiktok_compass_top
 
 ---
 
+## 版本与变更
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.1.0 | 06-11 | 初始发布（commit 24fe194） |
+| 1.1.1 | 06-20 | **修复系统性 `page.evaluate: Execution context was destroyed`** — 新增 `safePageEvaluate` helper（3 次 retry on destroyed + 每次 retry 前 `waitForLoadState('domcontentloaded')` 缓冲），替换 3 处 navigation 紧耦合的 evaluate：`readUrlShopRegionParam` + `gotoSellerPageRespectingShopRegion` 内 `window.location.replace` 触发点。修复是**纯增量 retry 包装**，行为兼容（3 次内成功 = 原 evaluate 1 次成功；3 次都 fail = 原 evaluate 抛 destroyed）。详见 handoff `devops-evaluate-destroyed-2026-06-20.md`。 |
+
+## 已知间歇问题（已修 v1.1.1）
+
+**症状**：跨 batch 跨店 fail，err 字节级相同：
+
+```
+page.evaluate: Execution context was destroyed, most likely because of a navigation
+```
+
+**根因**：TikTok Shop 是 SPA，`page.goto` / `window.location.replace` 后 navigation 状态不稳定；紧随其后的 `page.evaluate` 偶尔撞 destroyed context（Playwright 已知 race）。
+
+**触发场景**：06-18 / 06-19 / 06-20 batch 中 GMNQ5O / 6KFTAN / M2SKTR 等多店 fail，间歇性 ~30-50%。
+
+**修复**：v1.1.1 加 `safePageEvaluate` retry 包装（见上表）。dry-run 探针见 `_temp/devops_probe_evaluate_destroyed.mjs`（间歇 bug 未 100% 复现，但 safePageEvaluate 验证 5/5 OK，修复不破坏好情况行为）。
+
+---
+
 ## 与本目录其它文件
 
 | 文件 | 用途 |

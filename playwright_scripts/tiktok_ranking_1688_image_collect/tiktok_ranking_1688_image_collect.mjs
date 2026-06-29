@@ -19,6 +19,10 @@
  */
 
 import { chromium } from 'playwright'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { logProgress, showPageResultModalUntilAck } from '../_lib/page_runtime_ui.mjs'
+import { openScriptArgsPanel } from '../_lib/script_args_panel.mjs'
 
 const OFFER_SEARCH_URL = 'https://s.1688.com/selloffer/offer_search.html'
 
@@ -292,13 +296,9 @@ async function fetchUndevelopedRankingProducts(erpBase, apiKey, current, pageSiz
  * @param {string} apiKey
  * @param {string} detailUrl
  * @param {string} html
- * @param {boolean} dryRun
  * @returns {{ status: string, result?: { msg?: string } }}
  */
-function postWarehouseCollect(erpBase, apiKey, detailUrl, html, dryRun) {
-  if (dryRun) {
-    return { status: 'dry_run', result: { msg: 'skipped' } }
-  }
+function postWarehouseCollect(erpBase, apiKey, detailUrl, html) {
   const collectUrl = `${String(erpBase).replace(/\/$/, '')}/api/warehouse/collect/`
   const apiKeyCopy = apiKey
   const detailCopy = detailUrl
@@ -348,12 +348,8 @@ function postWarehouseCollect(erpBase, apiKey, detailUrl, html, dryRun) {
  * @param {string} erpBase
  * @param {string} apiKey
  * @param {number[]} ids
- * @param {boolean} dryRun
  */
-async function postMarkDevelopedBatch(erpBase, apiKey, ids, dryRun) {
-  if (dryRun) {
-    return { ok: true, target_type: 'ranking_product', marked: 0, skipped: [], dry_run: true }
-  }
+async function postMarkDevelopedBatch(erpBase, apiKey, ids) {
   return requestJson(`${erpBase}/api/opportunity/tiktok_developed/mark_batch/`, {
     method: 'POST',
     headers: {
@@ -634,12 +630,34 @@ async function run1688ImageSearchFlow(context, page, imageUrl) {
   return { detailUrl, html, page: nextPage }
 }
 
+function buildCollectResultLines(collectResults, picked, skipMark) {
+  const okCount = collectResults.filter((item) => item.ok).length
+  return [
+    `随机商品数：${picked.length}`,
+    `图搜采集：成功 ${okCount} / ${collectResults.length}`,
+    `批量标记已开发：${skipMark ? '已跳过（--skipMark）' : '已执行'}`,
+    '',
+    '商品明细：',
+    ...picked.map(
+      (p, i) =>
+        `  ${i + 1}. id=${p.id} · ${String(p.row.title || '').slice(0, 40)} · ${p.image_url_list.length} 张图`,
+    ),
+    '',
+    '采集记录：',
+    ...collectResults.map((item) => {
+      const id = item.rankingProductId
+      const status = item.ok ? '成功' : '失败'
+      const detail = item.detailUrl ? String(item.detailUrl).slice(0, 60) : item.error || ''
+      return `  · id=${id} ${status}${detail ? ` · ${detail}` : ''}`
+    }),
+  ]
+}
+
 async function run() {
   const useLaunchApi = hasFlag('--useLaunchApi')
   const launchEdge = hasFlag('--launch-edge')
   const headed = hasFlag('--headed')
   const keepOpen = hasFlag('--keepOpen')
-  const dryRun = hasFlag('--dryRun')
   const skipMark = hasFlag('--skipMark')
 
   const baseUrl = getArgValue('--baseUrl') || DEFAULT_BASE_URL
@@ -715,6 +733,12 @@ async function run() {
   if (!page) throw new Error('no page')
 
   const context = page.context()
+  await openScriptArgsPanel(page, { scriptDir: path.dirname(fileURLToPath(import.meta.url)) })
+
+  await logProgress(
+    page,
+    `[脚本] 开始榜单图搜 1688 采集：ERP 待开发 ${withImages.length} 条，随机 ${pickN} 条`,
+  )
 
   /** @type {Array<Record<string, unknown>>} */
   const collectResults = []
@@ -722,20 +746,28 @@ async function run() {
   try {
     for (let pi = 0; pi < picked.length; pi += 1) {
       const item = picked[pi]
-      const { id, image_url_list } = item
+      const { id, image_url_list, row } = item
+      await logProgress(
+        page,
+        `[脚本] 商品 ${pi + 1}/${picked.length}：id=${id} · ${String(row.title || '').slice(0, 30)} · ${image_url_list.length} 张图`,
+      )
       for (let ii = 0; ii < image_url_list.length; ii += 1) {
         const imageUrl = image_url_list[ii]
         const phase = `product[${pi + 1}/${picked.length}] id=${id} image[${ii + 1}/${image_url_list.length}]`
+        await logProgress(
+          page,
+          `[脚本] 1688 图搜中：商品 ${pi + 1}/${picked.length} · 图 ${ii + 1}/${image_url_list.length}`,
+        )
         try {
           const { detailUrl, html, page: nextPage } = await run1688ImageSearchFlow(context, page, imageUrl)
           page = nextPage
-          const collectPayload = postWarehouseCollect(erp.baseUrl, erp.apiKey, detailUrl, html, dryRun)
+          await logProgress(page, `[脚本] 已进入 1688 详情页，正在 POST 仓库采集…`)
+          const collectPayload = postWarehouseCollect(erp.baseUrl, erp.apiKey, detailUrl, html)
           const st =
             collectPayload && typeof collectPayload === 'object'
               ? /** @type {{ status?: string }} */ (collectPayload).status
               : ''
-          const ok =
-            dryRun || st === 'success' || st === 'dispatched'
+          const ok = st === 'success' || st === 'dispatched'
           collectResults.push({
             phase,
             rankingProductId: id,
@@ -744,6 +776,10 @@ async function run() {
             collect: collectPayload,
             ok,
           })
+          await logProgress(
+            page,
+            `[脚本] 采集 ${ok ? '成功' : '失败'}：id=${id} · ${st || 'unknown'}`,
+          )
           if (!ok) {
             throw new Error(
               `仓库采集未成功: ${JSON.stringify(collectPayload)}`,
@@ -757,6 +793,10 @@ async function run() {
             ok: false,
             error: e instanceof Error ? e.message : String(e),
           })
+          await logProgress(
+            page,
+            `[脚本] 采集异常：id=${id} · ${e instanceof Error ? e.message : String(e)}`,
+          )
           throw e
         }
       }
@@ -765,30 +805,50 @@ async function run() {
     const ids = picked.map((p) => p.id)
     let markPayload = null
     if (!skipMark) {
-      markPayload = await postMarkDevelopedBatch(erp.baseUrl, erp.apiKey, ids, dryRun)
+      await logProgress(page, `[脚本] 正在批量标记 ${ids.length} 条商品为已开发…`)
+      markPayload = await postMarkDevelopedBatch(erp.baseUrl, erp.apiKey, ids)
+      await logProgress(page, `[脚本] 批量标记已完成`)
     }
 
-    console.log(
-      JSON.stringify(
-        {
-          ok: true,
-          pickedIds: ids,
-          picked: picked.map((p) => ({
-            id: p.id,
-            title: p.row.title,
-            imageCount: p.image_url_list.length,
-          })),
-          collectResults,
-          markDeveloped: markPayload,
-        },
-        null,
-        2,
-      ),
-    )
-
-    if (keepOpen) {
-      await new Promise(() => {})
+    const payload = {
+      ok: true,
+      pickedIds: ids,
+      picked: picked.map((p) => ({
+        id: p.id,
+        title: p.row.title,
+        imageCount: p.image_url_list.length,
+      })),
+      collectResults,
+      markDeveloped: markPayload,
     }
+    console.log(JSON.stringify(payload, null, 2))
+
+    await showPageResultModalUntilAck(page, {
+      title: '榜单图搜采集已完成',
+      variant: 'success',
+      lines: [...buildCollectResultLines(collectResults, picked, skipMark), '', '终端已输出完整 JSON。点击「确定」关闭。'],
+    })
+
+    if (keepOpen) await new Promise(() => {})
+  } catch (e) {
+    process.exitCode = 1
+    const message = e instanceof Error ? e.message : String(e)
+    console.error(JSON.stringify({ ok: false, error: message, collectResults }, null, 2))
+    try {
+      await showPageResultModalUntilAck(page, {
+        title: '榜单图搜采集异常结束',
+        variant: 'danger',
+        lines: [
+          `异常：${message}`,
+          ...buildCollectResultLines(collectResults, picked, skipMark),
+          '',
+          '终端已输出错误 JSON。点击「确定」关闭。',
+        ],
+      })
+    } catch {
+      /* 页面不可用时仍可依赖终端输出 */
+    }
+    if (keepOpen) await new Promise(() => {})
   } finally {
     if (!keepOpen && close) await close()
   }

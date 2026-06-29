@@ -1,5 +1,6 @@
 /**
  * 从 build/icon.png 生成多尺寸 PNG 与 Windows 多尺寸 icon.ico。
+ * 若源图带黑色底，先运行 node scripts/fix-logo-transparency.mjs
  * 用法: node scripts/generate-icons.mjs
  */
 import fs from 'fs';

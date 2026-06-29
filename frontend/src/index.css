@@ -130,6 +130,10 @@ input, select, textarea {
 }
 
 /* 图标样式 */
+.fallback-logo {
+  border-radius: 9999px;
+  background-color: var(--color-accent);
+}
 .fallback-logo .fallback-content {
   display: block;
 }

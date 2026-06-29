@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Activity, CheckCircle, ChevronDown, ChevronRight, ChevronUp, Copy, Edit2, FileText, Key, Pencil, Play, Plus, RefreshCw, RotateCcw, Settings, Sliders, Square, Star, Trash2, XCircle, Gift, LayoutGrid, List } from 'lucide-react'
+import { Activity, CheckCircle, ChevronDown, ChevronRight, ChevronUp, Copy, Download, Edit2, FileText, Key, Pencil, Play, Plus, RefreshCw, RotateCcw, Settings, Sliders, Square, Star, Trash2, Upload, XCircle, Gift, LayoutGrid, List } from 'lucide-react'
 import { Badge, Button, Card, FormItem, Input, Modal, StatCard, Table, Textarea, toast } from '../../../shared/components'
 import { fetchDashboardStats, redeemCDKey, reloadConfig } from '../../dashboard/api'
 import type { TableColumn } from '../../../shared/components/Table'
@@ -15,6 +15,7 @@ import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import { resolveActionErrorMessage, resolveActionFeedback } from '../utils/actionErrors'
 import {
   copyBrowserProfile,
+  createBrowserProfile,
   deleteBrowserCore,
   deleteBrowserProfile,
   fetchBrowserCores,
@@ -22,6 +23,8 @@ import {
   fetchBrowserProxies,
   fetchBrowserSettings,
   fetchGroups,
+  fetchProfileCredentials,
+  saveProfileCredential,
   regenerateBrowserProfileCode,
   restartBrowserInstance,
   saveBrowserCore,
@@ -30,9 +33,21 @@ import {
   setDefaultBrowserCore,
   startBrowserInstance,
   stopBrowserInstance,
+  updateBrowserProfile,
   validateBrowserCorePath,
   validateProxyConfig,
 } from '../api'
+import {
+  decodeCsvBytes,
+  downloadCsv,
+  instanceCsvRowToCredentialInput,
+  instanceCsvRowToInput,
+  instanceRowKey,
+  parseInstanceCsv,
+  profilesToCsv,
+  rowHasCredential,
+  type InstanceCsvRow,
+} from '../utils/instanceCsv'
 
 // 批量操作工具栏
 function BatchToolbar({
@@ -315,6 +330,13 @@ export function BrowserListPage() {
   const [cdKey, setCdKey] = useState('')
   const [redeeming, setRedeeming] = useState(false)
   const [maxProfileLimit, setMaxProfileLimit] = useState(20)
+
+  // CSV 导入导出
+  const csvInputRef = useRef<HTMLInputElement>(null)
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importRows, setImportRows] = useState<InstanceCsvRow[]>([])
+  const [importParseErrors, setImportParseErrors] = useState<string[]>([])
+  const [importing, setImporting] = useState(false)
 
   const updatePendingIds = (
     setter: React.Dispatch<React.SetStateAction<Set<string>>>,
@@ -840,6 +862,140 @@ export function BrowserListPage() {
     }
   }
 
+  const handleExportCsv = async () => {
+    const selected = profiles.filter(p => selectedIds.has(p.profileId))
+    const toExport = selected.length > 0 ? selected : filteredProfiles
+    if (toExport.length === 0) {
+      toast.info('没有可导出的实例')
+      return
+    }
+    try {
+      const credLists = await Promise.all(toExport.map(p => fetchProfileCredentials(p.profileId)))
+      const credentialsByProfileId = new Map(
+        toExport.map((p, i) => [p.profileId, credLists[i]]),
+      )
+      const credCount = credLists.reduce((sum, list) => sum + list.length, 0)
+      const csv = profilesToCsv(toExport, groups, credentialsByProfileId)
+      const date = new Date().toISOString().slice(0, 10)
+      downloadCsv(csv, `instances-${date}.csv`)
+      toast.success(`已导出 ${toExport.length} 个实例${credCount > 0 ? `、${credCount} 条网站账号` : ''}`)
+    } catch {
+      toast.error('导出失败')
+    }
+  }
+
+  const handlePickImportFile = () => {
+    csvInputRef.current?.click()
+  }
+
+  const handleImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      const text = decodeCsvBytes(await file.arrayBuffer())
+      const { rows, errors } = parseInstanceCsv(text)
+      if (rows.length === 0) {
+        toast.error(errors[0] || '未解析到有效数据行')
+        return
+      }
+      setImportRows(rows)
+      setImportParseErrors(errors)
+      setImportModalOpen(true)
+    } catch {
+      toast.error('读取 CSV 文件失败')
+    }
+  }
+
+  const handleConfirmImport = async () => {
+    if (importRows.length === 0) return
+    setImporting(true)
+    let created = 0
+    let updated = 0
+    let credSaved = 0
+    const failures: string[] = []
+
+    const profileById = new Map(profiles.map(p => [p.profileId, p]))
+    const processedInstanceKeys = new Set<string>()
+    const instanceIdByKey = new Map<string, string>()
+
+    for (const row of importRows) {
+      try {
+        const rowKey = instanceRowKey(row)
+        let profileId = instanceIdByKey.get(rowKey)
+
+        if (!processedInstanceKeys.has(rowKey)) {
+          const input = instanceCsvRowToInput(row, groups)
+          const existing = row.profileId ? profileById.get(row.profileId) : undefined
+
+          if (existing) {
+            await updateBrowserProfile(existing.profileId, input)
+            profileId = existing.profileId
+            updated++
+          } else {
+            const createdProfile = await createBrowserProfile(input)
+            if (!createdProfile) {
+              failures.push(`第 ${row.lineNo} 行：创建实例失败`)
+              continue
+            }
+            profileId = createdProfile.profileId
+            created++
+          }
+
+          processedInstanceKeys.add(rowKey)
+          if (profileId) {
+            instanceIdByKey.set(rowKey, profileId)
+            if (row.profileName) instanceIdByKey.set(row.profileName, profileId)
+            if (row.profileId) instanceIdByKey.set(row.profileId, profileId)
+          }
+
+          if (row.launchCode && profileId) {
+            try {
+              await setBrowserProfileCode(profileId, row.launchCode)
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : '设置快捷码失败'
+              failures.push(`第 ${row.lineNo} 行：${msg}`)
+            }
+          }
+        }
+
+        if (!profileId) continue
+
+        if (rowHasCredential(row)) {
+          const credInput = instanceCsvRowToCredentialInput(row)
+          if (!credInput) {
+            failures.push(`第 ${row.lineNo} 行：网站账号缺少站点域名`)
+            continue
+          }
+          try {
+            await saveProfileCredential(profileId, credInput)
+            credSaved++
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : '保存网站账号失败'
+            failures.push(`第 ${row.lineNo} 行：${msg}`)
+          }
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : '导入失败'
+        failures.push(`第 ${row.lineNo} 行：${msg}`)
+      }
+    }
+
+    setImporting(false)
+    setImportModalOpen(false)
+    setImportRows([])
+    setImportParseErrors([])
+    await loadProfiles()
+    await loadGroups()
+
+    const summary = `新建 ${created}，更新 ${updated}${credSaved > 0 ? `，网站账号 ${credSaved}` : ''}`
+    if (failures.length > 0) {
+      setOpError(`导入完成：${summary}，失败 ${failures.length} 条\n\n${failures.slice(0, 10).join('\n')}${failures.length > 10 ? '\n...' : ''}`)
+    } else {
+      toast.success(`导入完成：${summary}`)
+    }
+  }
+
   const columns: TableColumn<BrowserProfile>[] = [
     {
       key: 'selection',
@@ -991,6 +1147,11 @@ export function BrowserListPage() {
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" onClick={() => setHeaderCollapsed(prev => !prev)}>{headerCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}{headerCollapsed ? '展开面板' : '收起面板'}</Button>
           <Button variant="secondary" size="sm" onClick={() => { void loadProfiles() }}><RefreshCw className="w-4 h-4" />刷新</Button>
+          <Button variant="secondary" size="sm" onClick={handleExportCsv} title={selectedIds.size > 0 ? `导出已选 ${selectedIds.size} 项` : '导出当前列表'}>
+            <Download className="w-4 h-4" />导出 CSV
+          </Button>
+          <Button variant="secondary" size="sm" onClick={handlePickImportFile}><Upload className="w-4 h-4" />导入 CSV</Button>
+          <input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportFileChange} />
           <Button variant="secondary" size="sm" onClick={handleOpenSettings}><Sliders className="w-4 h-4" />基础配置</Button>
           <Button variant="secondary" size="sm" onClick={() => { setCdKey(''); setExpandModalOpen(true); loadQuota() }} className="text-[var(--color-primary)] border-[var(--color-primary)] hover:bg-[var(--color-primary)]/10">
             <Gift className="w-4 h-4" />扩容实例
@@ -1387,6 +1548,64 @@ export function BrowserListPage() {
         footer={<Button onClick={() => setOpError('')}>知道了</Button>}
       >
         <div className="text-[var(--color-text-secondary)] whitespace-pre-line">{opError}</div>
+      </Modal>
+
+      {/* CSV 导入确认弹窗 */}
+      <Modal
+        open={importModalOpen}
+        onClose={() => { if (!importing) { setImportModalOpen(false); setImportRows([]); setImportParseErrors([]) } }}
+        title="确认导入实例"
+        width="640px"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setImportModalOpen(false); setImportRows([]); setImportParseErrors([]) }} disabled={importing}>取消</Button>
+            <Button onClick={() => { void handleConfirmImport() }} loading={importing} disabled={importRows.length === 0}>确认导入</Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-[var(--color-text-muted)]">
+            共 {importRows.length} 条记录。同一实例有多条网站账号时，实例信息可重复多行。
+            若含「实例ID」且匹配则更新，否则新建。多值字段用竖线 <code className="text-xs">|</code> 分隔。
+            导出文件含明文密码，请妥善保管。
+          </p>
+          {importParseErrors.length > 0 && (
+            <div className="text-xs text-amber-600 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 space-y-1 max-h-24 overflow-auto">
+              {importParseErrors.map((err, i) => <p key={i}>{err}</p>)}
+            </div>
+          )}
+          <div className="border border-[var(--color-border-default)] rounded-lg overflow-auto max-h-64">
+            <table className="w-full text-sm">
+              <thead className="bg-[var(--color-bg-muted)] sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--color-text-muted)]">实例名称</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--color-text-muted)]">实例ID</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--color-text-muted)]">代理</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-[var(--color-text-muted)]">网站账号</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importRows.slice(0, 50).map((row, i) => (
+                  <tr key={i} className="border-t border-[var(--color-border-muted)]">
+                    <td className="px-3 py-2">{row.profileName}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-[var(--color-text-muted)]">{row.profileId || '（新建）'}</td>
+                    <td className="px-3 py-2 text-xs truncate max-w-[140px]" title={row.proxyId || row.proxyConfig}>{row.proxyId || row.proxyConfig || '-'}</td>
+                    <td className="px-3 py-2 text-xs">
+                      {rowHasCredential(row)
+                        ? `${row.credentialLabel || row.siteHost || '账号'} / ${row.username || '-'}`
+                        : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {importRows.length > 50 && (
+              <p className="text-xs text-[var(--color-text-muted)] px-3 py-2 border-t border-[var(--color-border-muted)]">
+                仅预览前 50 条，导入时将处理全部 {importRows.length} 条
+              </p>
+            )}
+          </div>
+        </div>
       </Modal>
     </div>
   )

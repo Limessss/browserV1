@@ -13,3 +13,11 @@ data/**
 # 桥接二进制由 scripts/fetch-xray-windows.mjs 在打包前下载，勿提交
 bin/**/xray.exe
 bin/**/sing-box.exe
+
+# Live Bridge / MCP 本地调试输出（勿提交）
+scripts/_live_bridge_test/*
+!scripts/_live_bridge_test/.gitkeep
+mcp-test-out.jsonl
+
+# 用户在浏览器参数面板保存的脚本默认参数（本地覆盖 script.json）
+playwright_scripts/_user_defaults/*.json

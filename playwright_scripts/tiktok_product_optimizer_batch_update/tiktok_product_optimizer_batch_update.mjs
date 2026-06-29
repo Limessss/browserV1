@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 
 import { chromium } from 'playwright'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { logProgress, showPageResultModalUntilAck } from '../_lib/page_runtime_ui.mjs'
+import { openScriptArgsPanel } from '../_lib/script_args_panel.mjs'
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 
 const OPTIMIZER_PATH = '/product/optimizer'
 const DEFAULT_BASE_URL = process.env.LAUNCH_BASE_URL || 'http://127.0.0.1:19876'
@@ -8,8 +14,6 @@ const DEFAULT_AUTH_HEADER = process.env.LAUNCH_API_AUTH_HEADER || 'X-Ant-Api-Key
 const DEFAULT_AUTH_KEY = process.env.LAUNCH_API_KEY || ''
 const DEBUG_READY_RETRY = 35
 const DEBUG_READY_INTERVAL_MS = 1000
-const PAGE_TOAST_MS = 3000
-const PAGE_TOAST_DOM_ID = 'ant-playwright-product-optimizer-toast'
 
 function getArgValue(flagName) {
   const idx = process.argv.indexOf(flagName)
@@ -206,96 +210,40 @@ async function safeBodyPreview(page) {
   }
 }
 
-async function showPageToast(page, message) {
-  const msg = String(message || '').slice(0, 600)
-  try {
-    await page.evaluate(
-      ({ text, ms, rootId }) => {
-        const prev = document.getElementById(rootId)
-        if (prev) prev.remove()
 
-        const sid = 'ant-playwright-product-optimizer-toast-styles'
-        if (!document.getElementById(sid)) {
-          const st = document.createElement('style')
-          st.id = sid
-          st.textContent = `
-@keyframes ant-pw-product-toast-in {
-  from { opacity: 0; transform: translateY(14px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-@keyframes ant-pw-product-toast-out {
-  from { opacity: 1; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(10px); }
-}
-`
-          document.head.appendChild(st)
-        }
 
-        const root = document.createElement('div')
-        root.id = rootId
-        root.style.cssText = [
-          'position:fixed',
-          'bottom:0',
-          'left:0',
-          'right:0',
-          'z-index:2147483646',
-          'pointer-events:none',
-          'display:flex',
-          'justify-content:center',
-          'align-items:flex-end',
-          'padding:0 14px 12px',
-          'box-sizing:border-box',
-          'font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
-          'font-size:13px',
-          'line-height:1.5',
-        ].join(';')
-
-        const row = document.createElement('div')
-        row.style.cssText = [
-          'max-width:min(620px,92vw)',
-          'display:flex',
-          'align-items:stretch',
-          'border-radius:12px 12px 0 0',
-          'overflow:hidden',
-          'box-shadow:0 -10px 36px rgba(0,0,0,.42),0 0 0 1px rgba(255,255,255,.08)',
-          'animation:ant-pw-product-toast-in 0.32s cubic-bezier(.22,1,.36,1) both',
-        ].join(';')
-
-        const stripe = document.createElement('div')
-        stripe.style.cssText = 'width:5px;flex-shrink:0;background:linear-gradient(180deg,#2dd4bf,#6366f1);'
-
-        const bar = document.createElement('div')
-        bar.style.cssText = [
-          'flex:1',
-          'background:linear-gradient(145deg,rgba(32,32,40,.98),rgba(20,20,26,.99))',
-          'color:#f4f4f8',
-          'padding:12px 18px',
-          'text-align:center',
-          'word-break:break-word',
-          'font-weight:500',
-        ].join(';')
-        bar.textContent = text
-
-        row.appendChild(stripe)
-        row.appendChild(bar)
-        root.appendChild(row)
-        document.body.appendChild(root)
-
-        window.setTimeout(() => {
-          row.style.animation = 'ant-pw-product-toast-out 0.28s ease forwards'
-          window.setTimeout(() => root.remove(), 280)
-        }, ms)
-      },
-      { text: msg, ms: PAGE_TOAST_MS, rootId: PAGE_TOAST_DOM_ID },
-    )
-  } catch {
-    // Ignore while the page is navigating.
-  }
+function formatStopReasonChinese(stopReason) {
+  const reason = String(stopReason || '').trim()
+  if (!reason) return '（未记录）'
+  if (reason === 'max_runtime_ms_reached') return '已达最长运行时间上限'
+  if (reason === 'no_more_products') return '无可更新商品'
+  if (reason === 'no_update_button_found') return '未找到「更新 N 件商品」按钮'
+  if (reason === 'update_button_error') return '更新按钮点击异常'
+  if (reason === 'batch_optimize_button_not_found_after_rounds') return '多轮后仍未找到「批量优化」按钮'
+  if (reason === 'no_updates_after_reopen') return '重新打开页面后无可更新商品'
+  const maxBatches = reason.match(/^max_update_batches_reached_(\d+)$/)
+  if (maxBatches) return `已达最大更新批次数（${maxBatches[1]}）`
+  const maxRounds = reason.match(/^max_optimize_rounds_reached_(\d+)$/)
+  if (maxRounds) return `已达最大优化轮数（${maxRounds[1]}）`
+  return reason
 }
 
-async function logProgress(page, message) {
-  console.log(message)
-  if (page) await showPageToast(page, message)
+function buildRegionResultLines(result) {
+  const batchTexts = (result.updateBatches || [])
+    .map((batch) => `第 ${batch.roundIndex || '?'} 轮 · 第 ${batch.batchIndex} 批 · ${batch.text || '（无文案）'}`)
+    .slice(0, 12)
+  return [
+    `店铺区域：${result.shopRegion}`,
+    `执行结果：${result.ok ? '成功' : '未完成'}`,
+    `优化轮数：${(result.optimizeRounds || []).length}`,
+    `更新批次数：${(result.updateBatches || []).length}`,
+    `累计商品数：${result.totalProductCount || 0}`,
+    `结束原因：${formatStopReasonChinese(result.stopReason)}`,
+    ...(result.error ? [`异常：${result.error}`] : []),
+    ...(batchTexts.length
+      ? ['', '批次明细（最多展示 12 条）：', ...batchTexts]
+      : ['', '批次明细：（无）']),
+  ]
 }
 
 async function clickFirstVisibleLocator(locator, timeoutMs = 10000) {
@@ -350,7 +298,7 @@ async function clickBatchOptimize(page) {
   })
 }
 
-async function clickUpdateProducts(page, { dryRun = false, timeoutMs = 20000 } = {}) {
+async function clickUpdateProducts(page, { timeoutMs = 20000 } = {}) {
   const updatePattern = /\u66f4\u65b0\s*\d+\s*\u4ef6\u5546\u54c1|Update\s*\d+\s*products?/i
   const deadline = Date.now() + timeoutMs
   let lastDisabledZero = null
@@ -368,7 +316,6 @@ async function clickUpdateProducts(page, { dryRun = false, timeoutMs = 20000 } =
 
       const text = (await item.innerText({ timeout: 1000 }).catch(() => '')).replace(/\s+/g, ' ').trim()
       const matchedCount = Number((text.match(/\d+/) || [0])[0])
-      if (dryRun) return { ok: true, dryRun: true, text, productCount: matchedCount, clicked: false }
       if (!enabled) {
         if (matchedCount === 0) {
           lastDisabledZero = { ok: false, text, productCount: matchedCount, error: 'Update button is disabled' }
@@ -379,7 +326,7 @@ async function clickUpdateProducts(page, { dryRun = false, timeoutMs = 20000 } =
 
       try {
         await item.click({ timeout: Math.min(15000, Math.max(5000, deadline - Date.now())) })
-        return { ok: true, dryRun: false, text, productCount: matchedCount, clicked: true }
+        return { ok: true, text, productCount: matchedCount, clicked: true }
       } catch (err) {
         lastClickError = { ok: false, text, productCount: matchedCount, error: err?.message || String(err) }
       }
@@ -391,25 +338,22 @@ async function clickUpdateProducts(page, { dryRun = false, timeoutMs = 20000 } =
   if (lastDisabledZero) return lastDisabledZero
   if (lastClickError) return lastClickError
 
-  return page.evaluate(
-    ({ dry }) => {
-      const pattern = /更新\s*\d+\s*件商品|Update\s*\d+\s*products?/i
-      const nodes = [...document.querySelectorAll('button, [role="button"], a, div, span')]
-      const visible = (el) => {
-        const style = window.getComputedStyle(el)
-        const rect = el.getBoundingClientRect()
-        return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0
-      }
-      const target = nodes.find((el) => pattern.test((el.textContent || '').replace(/\s+/g, ' ').trim()) && visible(el))
-      if (!target) return { ok: false, error: 'Update products button not found' }
+  return page.evaluate(() => {
+    const pattern = /更新\s*\d+\s*件商品|Update\s*\d+\s*products?/i
+    const nodes = [...document.querySelectorAll('button, [role="button"], a, div, span')]
+    const visible = (el) => {
+      const style = window.getComputedStyle(el)
+      const rect = el.getBoundingClientRect()
+      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0
+    }
+    const target = nodes.find((el) => pattern.test((el.textContent || '').replace(/\s+/g, ' ').trim()) && visible(el))
+    if (!target) return { ok: false, error: 'Update products button not found' }
 
-      const text = (target.textContent || '').replace(/\s+/g, ' ').trim()
-      const productCount = Number((text.match(/\d+/) || [0])[0])
-      if (!dry) target.click()
-      return { ok: true, dryRun: dry, text, productCount, clicked: !dry }
-    },
-    { dry: dryRun },
-  )
+    const text = (target.textContent || '').replace(/\s+/g, ' ').trim()
+    const productCount = Number((text.match(/\d+/) || [0])[0])
+    target.click()
+    return { ok: true, text, productCount, clicked: true }
+  })
 }
 
 async function updateProductsUntilDone(page, options) {
@@ -428,7 +372,6 @@ async function updateProductsUntilDone(page, options) {
     }
 
     const updateResult = await clickUpdateProducts(page, {
-      dryRun: options.dryRun,
       timeoutMs: options.updateButtonTimeoutMs,
     })
     lastResult = updateResult
@@ -453,22 +396,12 @@ async function updateProductsUntilDone(page, options) {
       text: updateResult.text,
       productCount: updateResult.productCount,
       clicked: updateResult.clicked,
-      dryRun: updateResult.dryRun,
     })
     await logProgress(
       page,
-      `${options.logPrefix || ''} batch ${batchIndex}: ${updateResult.clicked ? 'clicked' : 'located'} ${updateResult.text}`,
+      `[脚本${options.multiLabel || ''}] 第 ${batchIndex} 批：已点击「${updateResult.text}」` +
+        (updateResult.productCount ? `（${updateResult.productCount} 件）` : ''),
     )
-
-    if (options.dryRun) {
-      return {
-        ok: true,
-        batches,
-        lastResult: updateResult,
-        totalProductCount: batches.reduce((sum, item) => sum + (Number(item.productCount) || 0), 0),
-        stopReason: 'dry_run_first_batch_only',
-      }
-    }
 
     await page.waitForLoadState('networkidle', { timeout: options.networkIdleTimeoutMs }).catch(() => {})
     await sleep(options.afterUpdateClickMs)
@@ -485,6 +418,7 @@ async function updateProductsUntilDone(page, options) {
 
 async function runForRegion(page, shopRegion, options) {
   const url = buildOptimizerUrl(shopRegion)
+  const multiLabel = options.multiLabel || ''
   const result = {
     shopRegion,
     url,
@@ -504,25 +438,34 @@ async function runForRegion(page, shopRegion, options) {
       if (isRuntimeExpired(options)) {
         result.stopReason = 'max_runtime_ms_reached'
         result.ok = result.optimizeRounds.some((item) => item.updateBatches.length > 0)
+        await logProgress(page, `[脚本${multiLabel}] 已达最长运行时间，停止当前区域`)
         break
       }
 
-      await logProgress(page, `[${shopRegion}] optimize round ${roundIndex}/${options.maxOptimizeRounds}`)
+      const roundLabel =
+        options.maxOptimizeRounds > 1 ? `第 ${roundIndex}/${options.maxOptimizeRounds} 轮` : '本轮'
+      await logProgress(
+        page,
+        `[脚本${multiLabel}] ${roundLabel}：正在打开商品优化页（区域 ${shopRegion}）`,
+      )
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: options.navigationTimeoutMs })
       await page.waitForLoadState('networkidle', { timeout: options.networkIdleTimeoutMs }).catch(() => {})
       await sleep(options.waitMs)
+      await logProgress(page, `[脚本${multiLabel}] 商品优化页已打开`)
 
       if (/\/account\/login/i.test(page.url())) {
         result.error = 'TikTok Shop login is required for this browser profile'
         result.bodyPreview = await safeBodyPreview(page)
         result.finalUrl = page.url()
+        await logProgress(page, `[脚本${multiLabel}] 需要登录 TikTok Shop 卖家中心`)
         return result
       }
 
+      await logProgress(page, `[脚本${multiLabel}] 正在点击「批量优化」`)
       const batchOptimize = await clickBatchOptimize(page)
       result.batchOptimize = batchOptimize
       if (!batchOptimize?.ok) {
-        await logProgress(page, `[${shopRegion}] batch optimize button not found`)
+        await logProgress(page, `[脚本${multiLabel}] 未找到「批量优化」按钮`)
         result.bodyPreview = await safeBodyPreview(page)
         result.finalUrl = page.url()
         result.stopReason = result.optimizeRounds.length ? 'batch_optimize_button_not_found_after_rounds' : ''
@@ -530,10 +473,15 @@ async function runForRegion(page, shopRegion, options) {
         return result
       }
 
+      await logProgress(
+        page,
+        `[脚本${multiLabel}] 已点击「批量优化」${batchOptimize.text ? `：${batchOptimize.text}` : ''}`,
+      )
       await sleep(options.afterBatchClickMs)
+      await logProgress(page, `[脚本${multiLabel}] 侧边栏已打开，正在点击「更新 N 件商品」`)
       const updateSummary = await updateProductsUntilDone(page, {
         ...options,
-        logPrefix: `[${shopRegion}] round ${roundIndex}`,
+        multiLabel,
       })
       const round = {
         roundIndex,
@@ -555,19 +503,20 @@ async function runForRegion(page, shopRegion, options) {
       result.totalProductCount += updateSummary.totalProductCount
       result.stopReason = updateSummary.stopReason
 
-      if (options.dryRun) {
-        result.ok = Boolean(batchOptimize?.ok && updateSummary.ok)
-        break
-      }
-
       if (!updateSummary.ok) {
         result.ok = result.optimizeRounds.some((item) => item.updateBatches.length > 0)
         break
       }
 
+      await logProgress(
+        page,
+        `[脚本${multiLabel}] ${roundLabel}结束：${formatStopReasonChinese(updateSummary.stopReason)}` +
+          ` · 累计 ${updateSummary.totalProductCount || 0} 件`,
+      )
+
       const roundHadUpdates = updateSummary.batches.length > 0
       if (!roundHadUpdates) {
-        await logProgress(page, `[${shopRegion}] no updates after reopen`)
+        await logProgress(page, `[脚本${multiLabel}] 重新打开后无可更新商品，结束当前区域`)
         result.ok = true
         result.stopReason = 'no_updates_after_reopen'
         break
@@ -579,10 +528,18 @@ async function runForRegion(page, shopRegion, options) {
         result.ok = Boolean(batchOptimize?.ok && updateSummary.ok)
         if (noMoreInCurrentFlow && roundHadUpdates && roundIndex >= options.maxOptimizeRounds) {
           result.stopReason = `max_optimize_rounds_reached_${options.maxOptimizeRounds}`
+          await logProgress(
+            page,
+            `[脚本${multiLabel}] 已达最大优化轮数（${options.maxOptimizeRounds}），结束当前区域`,
+          )
         }
         break
       }
 
+      await logProgress(
+        page,
+        `[脚本${multiLabel}] 准备进入第 ${roundIndex + 1}/${options.maxOptimizeRounds} 轮批量优化`,
+      )
       await sleep(options.afterOptimizeRoundMs)
     }
 
@@ -604,10 +561,10 @@ async function runForRegion(page, shopRegion, options) {
 
 async function main() {
   const shopRegions = parseShopRegions(getArgValue('--shop_region'))
-  const dryRun = hasFlag('--dryRun')
+  const keepOpen = hasFlag('--keepOpen')
   const maxRuntimeMs = getNumberArg('--max_runtime_ms', 0)
+  const totalRegions = shopRegions.length
   const options = {
-    dryRun,
     waitMs: getNumberArg('--wait_ms', 1500),
     afterBatchClickMs: getNumberArg('--after_batch_click_ms', 1200),
     afterUpdateClickMs: getNumberArg('--after_update_click_ms', 2500),
@@ -623,37 +580,80 @@ async function main() {
 
   const startUrl = buildOptimizerUrl(shopRegions[0])
   const connection = await connectBrowser(startUrl)
+  await openScriptArgsPanel(connection.browser, { scriptDir: SCRIPT_DIR })
   const page = await getActivePage(connection.browser, startUrl)
   page.setDefaultTimeout(12000)
 
   const results = []
   try {
-    for (const shopRegion of shopRegions) {
+    for (let ri = 0; ri < shopRegions.length; ri += 1) {
+      const shopRegion = shopRegions[ri]
+      const multiLabel = totalRegions > 1 ? ` [区域 ${ri + 1}/${totalRegions} · ${shopRegion}]` : ''
       await logProgress(
         page,
-        `[${shopRegion}] open product optimizer and ${dryRun ? 'locate' : 'click'} batch update` +
-          (options.maxOptimizeRounds > 1 ? ` for up to ${options.maxOptimizeRounds} optimize rounds` : ''),
+        `[脚本] 开始商品批量优化更新${multiLabel}：区域 ${shopRegion}` +
+          (options.maxOptimizeRounds > 1 ? `，最多 ${options.maxOptimizeRounds} 轮` : ''),
       )
-      results.push(await runForRegion(page, shopRegion, options))
+      const regionResult = await runForRegion(page, shopRegion, { ...options, multiLabel })
+      results.push(regionResult)
+
+      if (totalRegions > 1 && ri + 1 < shopRegions.length) {
+        const nextRegion = shopRegions[ri + 1]
+        if (regionResult.ok) {
+          await logProgress(page, `[脚本] 区域 ${shopRegion} 已完成，继续下一区域：${nextRegion}`)
+        } else {
+          await logProgress(page, `[脚本] 区域 ${shopRegion} 未完成，继续下一区域：${nextRegion}`)
+        }
+      }
     }
+
+    const allOk = results.every((x) => x.ok)
+    const summary = {
+      ok: allOk,
+      cdpUrl: connection.cdpUrl,
+      shopRegions,
+      results,
+    }
+    console.log(JSON.stringify(summary, null, 2))
+    if (!allOk) process.exitCode = 1
+
+    if (totalRegions === 1) {
+      const result = results[0]
+      await showPageResultModalUntilAck(page, {
+        title: result.ok ? '任务已完成' : '任务结束',
+        variant: result.error ? 'danger' : result.ok ? 'success' : 'warning',
+        lines: [
+          ...buildRegionResultLines(result),
+          '',
+          '终端已输出完整 JSON。点击「确定」关闭。',
+        ],
+      })
+    } else if (results.length > 0) {
+      const summaryLines = [
+        `配置区域（共 ${totalRegions} 个）：${shopRegions.join('、')}`,
+        `已执行区域：${results.map((item) => item.shopRegion).join('、')}`,
+        '多区域模式：所有区域执行完成后仅弹出本汇总窗口一次。',
+        '',
+        '分项如下：',
+        '',
+      ]
+      for (const result of results) {
+        summaryLines.push(`「${result.shopRegion}」· ${result.ok ? '已完成' : '未完成'}`)
+        summaryLines.push(...buildRegionResultLines(result).map((line) => (line ? `  ${line}` : line)))
+        summaryLines.push('')
+      }
+      await showPageResultModalUntilAck(page, {
+        title: allOk ? '任务已完成' : '任务已结束（部分未完成）',
+        variant: allOk ? 'success' : 'warning',
+        lines: summaryLines,
+      })
+    }
+
+    if (keepOpen) await new Promise(() => {})
   } finally {
-    if (connection.closeBrowser) {
+    if (connection.closeBrowser && !keepOpen) {
       await connection.browser.close().catch(() => {})
     }
-  }
-
-  const summary = {
-    ok: results.every((x) => x.ok),
-    dryRun,
-    cdpUrl: connection.cdpUrl,
-    shopRegions,
-    results,
-  }
-
-  console.log(JSON.stringify(summary, null, 2))
-  if (!summary.ok) process.exitCode = 1
-  if (hasFlag('--keepOpen')) {
-    setTimeout(() => process.exit(process.exitCode || 0), 50)
   }
 }
 

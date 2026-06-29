@@ -11,6 +11,8 @@
 
 import { chromium } from 'playwright'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { logProgress, showPageResultModalUntilAck } from '../_lib/page_runtime_ui.mjs'
+import { openScriptArgsPanel } from '../_lib/script_args_panel.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -1003,10 +1005,31 @@ async function writeReports(payload, outDir) {
   return { jsonPath, htmlPath }
 }
 
+function buildShopResultLines(row) {
+  const gmv = row.metrics?.gmv?.text || row.metrics?.gmv?.value || '-'
+  const roi = row.metrics?.roi?.text || row.metrics?.roi?.value || '-'
+  const cost = row.metrics?.cost?.text || row.metrics?.cost?.value || '-'
+  return [
+    `店铺：${row.shopName}`,
+    `结果：${row.ok ? '成功' : '失败'}`,
+    `GMV：${gmv}`,
+    `ROI：${roi}`,
+    `花费：${cost}`,
+    ...(row.switched?.message && !row.switched.ok ? [`切换：${row.switched.message}`] : []),
+  ]
+}
+
 async function runFlow(page, opts) {
+  const dateLabel = DATE_RANGE_PRESETS[opts.dateRange]?.label || opts.dateRange
+  await logProgress(page, `[脚本] 开始 GMV Max 概览采集：日期 ${dateLabel}，aadvid=${opts.aadvid}`)
   await gotoDashboard(page, opts.aadvid)
+  await logProgress(page, `[脚本] GMV Max Dashboard 已打开`)
+
   const accountSelection = await selectAdAccountIfNeeded(page, opts)
   const aadvid = accountSelection.aadvid || opts.aadvid || ''
+  if (accountSelection.selected) {
+    await logProgress(page, `[脚本] 已选择广告账号，正在进入 Dashboard`)
+  }
   if (accountSelection.selected || aadvid) {
     await gotoDashboard(page, aadvid)
   }
@@ -1014,16 +1037,27 @@ async function runFlow(page, opts) {
   let shops = opts.shops
   let discovery = null
   if (!shops.length) {
+    await logProgress(page, `[脚本] 正在自动发现店铺列表…`)
     discovery = await autoDiscoverShops(page, opts.maxShops)
     shops = discovery.shops
+    await logProgress(page, `[脚本] 发现 ${shops.length} 个店铺，开始逐店采集`)
+  } else {
+    await logProgress(page, `[脚本] 使用指定店铺列表（${shops.length} 个），开始采集`)
   }
   if (!shops.length) shops = ['']
 
   const rows = []
   for (let i = 0; i < shops.length; i += 1) {
     const shopName = shops[i]
+    const shopLabel = shopName || '当前店铺'
+    await logProgress(page, `[脚本] 采集店铺 ${i + 1}/${shops.length}：${shopLabel}`)
     const row = await collectForShop(page, shopName, i, { dateRange: opts.dateRange })
     rows.push(row)
+    const gmvText = row.metrics?.gmv?.text || row.metrics?.gmv?.value || '-'
+    await logProgress(
+      page,
+      `[脚本] 店铺 ${shopLabel} ${row.ok ? '完成' : '失败'} · GMV ${gmvText}`,
+    )
   }
   const payload = {
     ok: rows.some((r) => r.ok),
@@ -1041,6 +1075,10 @@ async function runFlow(page, opts) {
     summary: buildSummary(rows),
   }
   const reports = await writeReports(payload, opts.outDir)
+  await logProgress(
+    page,
+    `[脚本] 报告已生成：${reports.jsonPath ? path.basename(reports.jsonPath) : 'json'} / ${reports.htmlPath ? path.basename(reports.htmlPath) : 'html'}`,
+  )
   return { ...payload, reports }
 }
 
@@ -1085,9 +1123,38 @@ async function run() {
     close = conn.close
   }
 
+  await openScriptArgsPanel(page, { scriptDir })
+
   try {
     const result = await runFlow(page, { shops, maxShops, outDir, aadvid, adAccount, dateRange })
     console.log(JSON.stringify(result, null, 2))
+    if (!result.ok) process.exitCode = 1
+
+    const summary = result.summary || {}
+    const summaryLines = [
+      `日期范围：${result.dateRange?.label || dateRange}`,
+      `广告账号 aadvid：${aadvid}`,
+      `店铺总数：${summary.totalShops ?? result.rows?.length ?? 0}`,
+      `成功：${summary.okShops ?? 0} · 失败：${summary.failedShops ?? 0}`,
+      ...(result.reports?.jsonPath ? [`JSON：${result.reports.jsonPath}`] : []),
+      ...(result.reports?.htmlPath ? [`HTML：${result.reports.htmlPath}`] : []),
+      '',
+      '分项如下：',
+      '',
+    ]
+    for (const row of result.rows || []) {
+      summaryLines.push(`「${row.shopName}」· ${row.ok ? '成功' : '失败'}`)
+      summaryLines.push(...buildShopResultLines(row).map((line) => `  ${line}`))
+      summaryLines.push('')
+    }
+    summaryLines.push('终端已输出完整 JSON。点击「确定」关闭。')
+
+    await showPageResultModalUntilAck(page, {
+      title: result.ok ? 'GMV Max 采集已完成' : 'GMV Max 采集结束（部分失败）',
+      variant: result.ok ? 'success' : 'warning',
+      lines: summaryLines,
+    })
+
     if (keepOpen) await new Promise(() => {})
   } finally {
     if (!keepOpen && close) await close()

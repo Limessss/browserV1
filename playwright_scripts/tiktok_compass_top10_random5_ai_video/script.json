@@ -5,9 +5,81 @@
   "entry": "tiktok_compass_top10_random5_ai_video.mjs",
   "order": 28,
   "tags": ["playwright", "tiktok", "shop", "compass", "ai-video"],
-  "version": "1.0.0",
+  "version": "1.1.1",
+  "lastVerified": "2026-06-20",
   "defaultArgs": ["--useLaunchApi", "--code", "ICHPPH", "--shop_region", "PH"],
-  "argsHint": "--shop_region 支持单码、逗号分隔或 JSON 数组依次执行，如 '[\"MY\",\"PH\"]'; 可选 --top_n --pick_n；--cdp 见 README。",
+  "argsHint": "可在启动参数面板图形化配置；亦支持 CLI。",
   "requiresLaunchServer": true,
-  "mcpDoc": "mcp_tiktok_compass_top10_random5_ai_video.md"
+  "mcpDoc": "mcp_tiktok_compass_top10_random5_ai_video.md",
+  "argForm": [
+    {
+      "type": "info",
+      "text": "本脚本会按曝光取 Top 商品并进入 AI 视频生成器真实点击「生成视频」。请确认环境码与站点无误。"
+    },
+    {
+      "id": "use_launch",
+      "flag": "--useLaunchApi",
+      "type": "boolean",
+      "asFlag": true,
+      "label": "通过 NexBrowser 自动连接浏览器",
+      "description": "推荐开启：使用环境码拉起或复用已登录的卖家中心。关闭后需填写 CDP 地址。",
+      "default": true
+    },
+    {
+      "id": "code",
+      "flag": "--code",
+      "type": "text",
+      "label": "环境码",
+      "description": "NexBrowser 实例列表中的 code，例如 ICHPPH。",
+      "placeholder": "例如 ICHPPH",
+      "default": "ICHPPH",
+      "required": true,
+      "showWhen": { "use_launch": true }
+    },
+    {
+      "id": "cdp",
+      "flag": "--cdp",
+      "type": "text",
+      "label": "CDP 调试地址",
+      "description": "已手动 Launch 时填写，例如 http://127.0.0.1:19876",
+      "placeholder": "http://127.0.0.1:19876",
+      "showWhen": { "use_launch": false }
+    },
+    {
+      "id": "shop_region",
+      "flag": "--shop_region",
+      "type": "multiselect",
+      "label": "要执行的站点（按顺序）",
+      "description": "Compass 与 AI 视频页都会带上 shop_region；多站点将依次完整执行。",
+      "default": ["PH"],
+      "options": [
+        { "value": "MY", "label": "马来西亚 MY" },
+        { "value": "PH", "label": "菲律宾 PH" },
+        { "value": "SG", "label": "新加坡 SG" },
+        { "value": "TH", "label": "泰国 TH" },
+        { "value": "VN", "label": "越南 VN" },
+        { "value": "ID", "label": "印尼 ID" }
+      ]
+    },
+    {
+      "id": "top_n",
+      "flag": "--top_n",
+      "type": "number",
+      "label": "曝光榜取前几条",
+      "description": "在 Compass 单品卡按曝光降序后，解析表格前 N 条商品，默认 10。",
+      "default": 10,
+      "min": 1,
+      "max": 50
+    },
+    {
+      "id": "pick_n",
+      "flag": "--pick_n",
+      "type": "number",
+      "label": "随机抽取几条去生成视频",
+      "description": "从上述 Top N 中随机选 M 条进入 AI 视频流程，默认 5，且不超过实际解析条数。",
+      "default": 5,
+      "min": 1,
+      "max": 50
+    }
+  ]
 }

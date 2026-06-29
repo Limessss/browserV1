@@ -173,6 +173,8 @@ const appMethodNames = [
   'OpenCorePath',
   'OpenPlaywrightScriptPath',
   'OpenPlaywrightScriptsDir',
+  'OpenLiveBridgeSkillDir',
+  'GetLiveBridgeSkillDir',
   'OpenUserDataDir',
   'QuitAppOnly',
   'RedeemCDKey',

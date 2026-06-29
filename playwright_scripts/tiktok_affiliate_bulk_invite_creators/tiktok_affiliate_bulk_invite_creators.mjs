@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 
 import { chromium } from 'playwright'
-import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { logProgress, showPageResultModalUntilAck } from '../_lib/page_runtime_ui.mjs'
+import { openScriptArgsPanel } from '../_lib/script_args_panel.mjs'
+import fs from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 
 const CREATOR_PATH = '/connection/creator'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -191,10 +195,281 @@ function normalizeFilterValues(values, filterKey) {
   return values.map((value) => aliases[value.toLowerCase()] || value)
 }
 
+const SHOP_REGION_CODES = ['MY', 'PH', 'SG', 'TH', 'VN', 'ID']
+
+function regionCodeEq(a, b) {
+  return String(a || '').trim().toUpperCase() === String(b || '').trim().toUpperCase()
+}
+
 function buildCreatorUrl(shopRegion) {
   const url = new URL(CREATOR_PATH, 'https://affiliate.tiktokshopglobalselling.com')
   url.searchParams.set('shop_region', shopRegion)
   return url.toString()
+}
+
+/** 从地址栏读取 shop_region（SPA 可能改写 URL，仅作辅助） */
+async function readUrlShopRegionParam(page) {
+  return page.evaluate(() => {
+    try {
+      return new URL(window.location.href).searchParams.get('shop_region') || ''
+    } catch {
+      return ''
+    }
+  })
+}
+
+/** 读取右上角头像旁的站点标识（MY/PH 等），比 URL 更可靠 */
+async function readVisibleHeaderShopRegion(page) {
+  return page.evaluate((codes) => {
+    const compact = (s) => String(s || '').replace(/\s+/g, ' ').trim()
+    const visible = (el) => {
+      const r = el.getBoundingClientRect()
+      const st = window.getComputedStyle(el)
+      return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'
+    }
+    const matchCode = (text) => {
+      const t = compact(text)
+      return codes.find((code) => t === code) || ''
+    }
+
+    const headerAvatars = Array.from(document.querySelectorAll('[class*="pulse-avatar"]'))
+      .filter(visible)
+      .filter((el) => el.getBoundingClientRect().top < 120)
+
+    for (const av of headerAvatars) {
+      let node = av.parentElement
+      for (let depth = 0; depth < 8 && node; depth += 1) {
+        const direct = matchCode(node.innerText || '')
+        if (direct) return direct
+        const nested = Array.from(node.querySelectorAll('span, div'))
+          .filter(visible)
+          .map((el) => matchCode(el.innerText || ''))
+          .find(Boolean)
+        if (nested) return nested
+        node = node.parentElement
+      }
+    }
+
+    return (
+      Array.from(document.querySelectorAll('span, div'))
+        .filter(visible)
+        .filter((el) => {
+          const r = el.getBoundingClientRect()
+          return r.top < 120 && r.right > window.innerWidth * 0.65
+        })
+        .map((el) => matchCode(el.innerText || ''))
+        .find(Boolean) || ''
+    )
+  }, SHOP_REGION_CODES)
+}
+
+/** 等待联盟顶栏（联盟中心 + 右上角头像）就绪 */
+async function waitForAffiliateHeaderReady(page, timeoutMs = 20_000) {
+  try {
+    await page.waitForFunction(
+      () => {
+        const visible = (el) => {
+          const r = el.getBoundingClientRect()
+          const st = window.getComputedStyle(el)
+          return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'
+        }
+        const hasAvatar = Array.from(document.querySelectorAll('[class*="pulse-avatar"]'))
+          .filter(visible)
+          .some((el) => el.getBoundingClientRect().top < 120)
+        const hasTitle = (document.body?.innerText || '').includes('联盟中心')
+        return hasAvatar && hasTitle
+      },
+      { timeout: timeoutMs },
+    )
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Affiliate header not ready' }
+  }
+}
+
+/** 点击右上角头像（取最右侧），展开站点切换菜单 */
+async function clickHeaderProfileMenu(page) {
+  return page.evaluate(() => {
+    const visible = (el) => {
+      const r = el.getBoundingClientRect()
+      const st = window.getComputedStyle(el)
+      return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'
+    }
+    const headerAvatars = Array.from(document.querySelectorAll('[class*="pulse-avatar"]'))
+      .filter(visible)
+      .filter((el) => el.getBoundingClientRect().top < 120)
+      .sort((a, b) => b.getBoundingClientRect().right - a.getBoundingClientRect().right)
+    if (!headerAvatars.length) return { ok: false, error: 'Header avatar not found' }
+
+    let clickTarget = headerAvatars[0]
+    for (let node = headerAvatars[0]; node; node = node.parentElement) {
+      if (node.getBoundingClientRect().top > 120) break
+      const st = window.getComputedStyle(node)
+      if (st.cursor === 'pointer' || node.getAttribute('role') === 'button') clickTarget = node
+    }
+    clickTarget.click()
+    return { ok: true }
+  })
+}
+
+async function waitForProfileRegionMenu(page, timeoutMs = 8000) {
+  try {
+    await page.waitForFunction(
+      () => /Choose one to manage/i.test(document.body?.innerText || ''),
+      { timeout: timeoutMs },
+    )
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Profile region menu did not open' }
+  }
+}
+
+/** 在头像下拉「Choose one to manage」面板内点击目标站点（探针：PH Philippines / MY Malaysia 等） */
+async function clickShopRegionInProfileMenu(page, shopRegion) {
+  return page.evaluate((want) => {
+    const compact = (s) => String(s || '').replace(/\s+/g, ' ').trim()
+    const visible = (el) => {
+      const r = el.getBoundingClientRect()
+      const st = window.getComputedStyle(el)
+      return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'
+    }
+    const patterns = {
+      MY: [/^MY\s+Malaysia$/i, /^MY$/],
+      PH: [/^PH\s+Philippines$/i, /^Philippines(?:\s|\(|$)/i],
+      SG: [/^SG\s+Singapore$/i, /^Singapore(?:\s|\(|$)/i],
+      TH: [/^TH\s+Thailand$/i, /^Thailand(?:\s|\(|$)/i],
+      VN: [/^VN\s+Vietnam$/i, /^Vietnam(?:\s|\(|$)/i],
+      ID: [/^ID\s+Indonesia$/i, /^Indonesia(?:\s|\(|$)/i],
+    }
+    const pats = patterns[want] || [new RegExp(`^${want}$`)]
+    const menuRoots = Array.from(document.querySelectorAll('div'))
+      .filter(visible)
+      .filter((el) => /Choose one to manage/i.test(el.innerText || ''))
+    const root = menuRoots.sort((a, b) => (b.innerText || '').length - (a.innerText || '').length)[0]
+    if (!root) return { ok: false, error: 'Region menu root not found' }
+
+    const candidates = []
+    for (const el of root.querySelectorAll('div, span, li, button, [role="menuitem"]')) {
+      if (!visible(el)) continue
+      const text = compact(el.innerText || '')
+      if (!text || text.length > 100) continue
+      if (/退出|简体中文|店铺管理|账号持有人|店铺代码|Choose one to manage/i.test(text)) continue
+      let score = -1
+      for (let i = 0; i < pats.length; i += 1) {
+        if (pats[i].test(text)) score = 100 - i * 10
+      }
+      if (score < 0) continue
+      score += Math.min(text.length, 40) * 0.1
+      candidates.push({ el, text, score })
+    }
+    candidates.sort((a, b) => b.score - a.score)
+    const best = candidates[0]
+    if (!best) return { ok: false, error: `Region option not found in menu: ${want}` }
+    best.el.click()
+    return { ok: true, text: best.text, score: best.score }
+  }, String(shopRegion || '').trim().toUpperCase())
+}
+
+/** 对比顶栏站点标识，不一致则点头像切换 */
+async function ensureAffiliateShopRegion(page, shopRegion, options = {}) {
+  const want = String(shopRegion || '').trim().toUpperCase()
+  if (!want) return { ok: true, skipped: true, switched: false, steps: [] }
+
+  const maxAttempts = options.regionSwitchAttempts ?? 2
+  const steps = []
+  let visibleRegion = await readVisibleHeaderShopRegion(page)
+  const urlRegion = await readUrlShopRegionParam(page)
+  steps.push(`visible=${visibleRegion || '(empty)'} url=${urlRegion || '(empty)'}`)
+
+  if (regionCodeEq(visibleRegion, want)) {
+    return { ok: true, visibleRegion, urlRegion, steps, switched: false }
+  }
+  if (!visibleRegion && regionCodeEq(urlRegion, want)) {
+    return { ok: true, visibleRegion, urlRegion, steps, switched: false }
+  }
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await waitForAffiliateHeaderReady(page, options.headerReadyTimeoutMs ?? 20_000)
+    let opened = await clickHeaderProfileMenu(page)
+    if (!opened.ok) {
+      await sleep(1200)
+      opened = await clickHeaderProfileMenu(page)
+    }
+    if (!opened.ok) return { ok: false, error: opened.error || 'Failed to open profile menu', steps, visibleRegion }
+
+    const menuReady = await waitForProfileRegionMenu(page, options.profileMenuTimeoutMs ?? 8000)
+    if (!menuReady.ok) {
+      await page.keyboard.press('Escape').catch(() => {})
+      return { ok: false, error: menuReady.error, steps, visibleRegion }
+    }
+    await sleep(options.afterProfileMenuMs ?? 400)
+    steps.push('open-profile-menu')
+
+    const picked = await clickShopRegionInProfileMenu(page, want)
+    if (!picked.ok) {
+      await page.keyboard.press('Escape').catch(() => {})
+      return { ok: false, error: picked.error, steps, visibleRegion }
+    }
+    steps.push(`pick=${picked.text}`)
+
+    await page.waitForLoadState('domcontentloaded', { timeout: options.navigationTimeoutMs ?? 120_000 }).catch(() => {})
+    await sleep(options.afterRegionSwitchMs ?? 1500)
+
+    visibleRegion = await readVisibleHeaderShopRegion(page)
+    const nextUrlRegion = await readUrlShopRegionParam(page)
+    steps.push(`after-visible=${visibleRegion || '(empty)'} url=${nextUrlRegion || '(empty)'}`)
+
+    if (regionCodeEq(visibleRegion, want) || regionCodeEq(nextUrlRegion, want)) {
+      return { ok: true, visibleRegion, urlRegion: nextUrlRegion, steps, switched: true }
+    }
+  }
+
+  return {
+    ok: false,
+    error: `Header region still not ${want} after UI switch (visible=${visibleRegion || 'n/a'})`,
+    visibleRegion,
+    urlRegion: await readUrlShopRegionParam(page),
+    steps,
+  }
+}
+
+/** 打开达人发现页并确保顶栏站点与 --shop_region 一致 */
+async function gotoCreatorPageRespectingShopRegion(page, shopRegion, options) {
+  const url = buildCreatorUrl(shopRegion)
+  const multiLabel = options.multiLabel || ''
+
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: options.navigationTimeoutMs })
+  await page.waitForLoadState('networkidle', { timeout: options.networkIdleTimeoutMs }).catch(() => {})
+  await sleep(options.waitMs)
+  await waitForAffiliateHeaderReady(page, options.headerReadyTimeoutMs ?? 20_000)
+
+  const visibleBefore = await readVisibleHeaderShopRegion(page)
+  const urlRegionBefore = await readUrlShopRegionParam(page)
+  const needSwitch = !regionCodeEq(visibleBefore, shopRegion) && !regionCodeEq(urlRegionBefore, shopRegion)
+
+  if (needSwitch) {
+    await logProgress(
+      page,
+      `[脚本${multiLabel}] 页面站点为 ${visibleBefore || urlRegionBefore || '未知'}，正在通过顶栏切换到 ${shopRegion}`,
+    )
+  }
+
+  const ensured = await ensureAffiliateShopRegion(page, shopRegion, options)
+  if (!ensured.ok) {
+    return { ok: false, url, error: ensured.error, regionSwitch: ensured }
+  }
+
+  if (ensured.switched) {
+    await logProgress(page, `[脚本${multiLabel}] 已通过顶栏切换到站点 ${shopRegion}`)
+  }
+
+  return {
+    ok: true,
+    url,
+    regionSwitch: ensured,
+    visibleRegion: ensured.visibleRegion,
+    urlRegion: ensured.urlRegion,
+  }
 }
 
 function requestJson(url, options = {}) {
@@ -337,13 +612,34 @@ async function reapplyCreatorSelectionInputs(page, options, result) {
   return { ok: true }
 }
 
+function buildAffiliateResultLines(result) {
+  const selectedCount = result.selectedCreators?.selectedCreators?.length ?? result.selectedCreators?.count ?? 0
+  return [
+    `店铺区域：${result.shopRegion}`,
+    `执行结果：${result.ok ? '成功' : '未完成'}`,
+    `已选达人：${selectedCount} 人`,
+    `商品 ID：${(result.productIds || []).join(', ') || '（无）'}`,
+    ...(result.invitationName ? [`邀请名称：${result.invitationName}`] : []),
+    ...(result.error ? [`异常：${result.error}`] : []),
+    ...(result.finalInvite?.text ? [`最终步骤：${result.finalInvite.text}`] : []),
+  ]
+}
+
 async function runCreateNewInvitationFlow(page, shopRegion, options, result, creatorPageUrl) {
+  const multiLabel = options.multiLabel || ''
   const duplicateReselectAttempts = []
   const maxDuplicateReselectAttempts = options.duplicateReselectAttempts ?? 3
 
   for (let attempt = 0; attempt <= maxDuplicateReselectAttempts; attempt += 1) {
     if (attempt > 0) {
-      await page.goto(creatorPageUrl, { waitUntil: 'domcontentloaded', timeout: options.navigationTimeoutMs })
+      await logProgress(page, `[脚本${multiLabel}] 检测到重复邀约达人，重新选人中（第 ${attempt + 1} 次）`)
+      const renav = await gotoCreatorPageRespectingShopRegion(page, shopRegion, options)
+      if (!renav.ok) {
+        result.error = renav.error
+        result.finalUrl = page.url()
+        result.bodyPreview = await safeBodyPreview(page)
+        return result
+      }
       const reapplied = await reapplyCreatorSelectionInputs(page, options, result)
       if (!reapplied.ok) {
         result.error = reapplied.error
@@ -353,14 +649,18 @@ async function runCreateNewInvitationFlow(page, shopRegion, options, result, cre
       }
     }
 
+    await logProgress(page, `[脚本${multiLabel}] 正在勾选达人（最多 ${options.maxCreators} 人）…`)
     result.selectedCreators = await selectCreatorRows(page, options.maxCreators, options)
     result.duplicateReselectAttempts = duplicateReselectAttempts
     if (!result.selectedCreators.ok) {
       result.error = 'No creators were selected'
       result.finalUrl = page.url()
       result.bodyPreview = await safeBodyPreview(page)
+      await logProgress(page, `[脚本${multiLabel}] 未勾选到可用达人`)
       return result
     }
+    const pickedCount = result.selectedCreators?.selectedCreators?.length ?? result.selectedCreators?.count ?? 0
+    await logProgress(page, `[脚本${multiLabel}] 已勾选 ${pickedCount} 位达人，正在点击「批量邀约」`)
 
     await returnToBulkActions(page)
     result.bulkInvite = await clickButtonByText(page, TEXT_BULK_INVITE, { timeoutMs: options.invitationTimeoutMs })
@@ -373,15 +673,18 @@ async function runCreateNewInvitationFlow(page, shopRegion, options, result, cre
 
     await sleep(options.afterBulkInviteMs)
 
+    await logProgress(page, `[脚本${multiLabel}] 正在切换到「创建新邀请」·「仅佣金」`)
     const switchResult = await switchToCreateNewInvitation(page, options)
     result.createFlow = switchResult
     if (!switchResult.ok) {
       result.error = switchResult.error
       result.finalUrl = page.url()
       result.bodyPreview = await safeBodyPreview(page)
+      await logProgress(page, `[脚本${multiLabel}] 切换创建新邀请失败`)
       return result
     }
 
+    await logProgress(page, `[脚本${multiLabel}] 正在打开邀约表单页`)
     const formResult = await clickInviteButtonToForm(page, options)
     result.inviteToForm = formResult
     if (!formResult.ok) {
@@ -415,18 +718,21 @@ async function runCreateNewInvitationFlow(page, shopRegion, options, result, cre
       return result
     }
 
+    await logProgress(
+      page,
+      `[脚本${multiLabel}] 正在填写邀约表单（商品 ${options.productIds.length} 个）`,
+    )
     result.formFill = await fillInvitationForm(page, options)
-    if (options.dryRun) {
-      result.finalInvite = { ok: true, dryRun: true, clicked: false, text: 'filled invitation form, not submitted' }
-      result.ok = Boolean(result.formFill?.ok)
-    } else {
-      result.ok = Boolean(result.formFill?.submitted)
-      if (!result.ok) result.error = result.formFill?.error || 'Invitation form was not submitted'
-    }
+    result.ok = Boolean(result.formFill?.submitted)
+    if (!result.ok) result.error = result.formFill?.error || 'Invitation form was not submitted'
+    await logProgress(
+      page,
+      `[脚本${multiLabel}] ${result.ok ? '合作邀请发送成功' : '邀约发送未完成'}`,
+    )
 
     result.finalUrl = page.url()
     result.bodyPreview = await safeBodyPreview(page)
-    if (!options.dryRun && result.ok && /\u5408\u4f5c\u9080\u8bf7\u53d1\u9001\u6210\u529f|\u9080\u8bf7\u53d1\u9001\u6210\u529f/.test(result.bodyPreview || '')) {
+    if (result.ok && /\u5408\u4f5c\u9080\u8bf7\u53d1\u9001\u6210\u529f|\u9080\u8bf7\u53d1\u9001\u6210\u529f/.test(result.bodyPreview || '')) {
       result.invitedLedger = recordInvitedCreatorsForProducts(
         options.productIds,
         result.selectedCreators?.selectedCreators || [],
@@ -2653,12 +2959,6 @@ async function fillInvitationForm(page, options) {
     await page.waitForTimeout(300)
   }
 
-  if (options.dryRun) {
-    result.dryRun = true
-    result.ok = true
-    return result
-  }
-
   // 7. 点击发送按钮
   const sendClicked = await page.evaluate(() => {
     const btns = document.querySelectorAll('button')
@@ -2976,11 +3276,13 @@ async function clickFinalInvite(page, options) {
 
 async function runForRegion(page, shopRegion, options) {
   const url = buildCreatorUrl(shopRegion)
+  const multiLabel = options.multiLabel || ''
   const result = {
     shopRegion,
     url,
     ok: false,
-    dryRun: options.dryRun,
+    invitationName: options.invitationName,
+    productIds: options.productIds,
     selectedCreators: null,
     bulkInvite: null,
     selectedInvitationPlan: null,
@@ -2991,36 +3293,56 @@ async function runForRegion(page, shopRegion, options) {
   }
 
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: options.navigationTimeoutMs })
+    await logProgress(page, `[脚本${multiLabel}] 正在打开联盟达人发现页（区域 ${shopRegion}）`)
+    const nav = await gotoCreatorPageRespectingShopRegion(page, shopRegion, options)
+    if (!nav.ok) {
+      result.error = nav.error
+      result.regionSwitch = nav.regionSwitch
+      result.finalUrl = page.url()
+      result.bodyPreview = await safeBodyPreview(page)
+      await logProgress(page, `[脚本${multiLabel}] 站点切换失败：${nav.error || 'unknown'}`)
+      return result
+    }
+    result.regionSwitch = nav.regionSwitch
     const ready = await waitForCreatorPage(page, options)
     if (!ready.ok) {
       result.error = ready.error
       result.finalUrl = page.url()
       result.bodyPreview = await safeBodyPreview(page)
+      await logProgress(page, `[脚本${multiLabel}] 达人发现页未就绪：${ready.error || 'unknown'}`)
       return result
     }
+    await logProgress(page, `[脚本${multiLabel}] 达人发现页已打开，正在应用筛选条件`)
 
     result.filters = await applyCreatorFilters(page, options)
     if (!result.filters.ok) {
       result.error = result.filters.error
       result.finalUrl = page.url()
       result.bodyPreview = await safeBodyPreview(page)
+      await logProgress(page, `[脚本${multiLabel}] 筛选条件应用失败`)
       return result
     }
 
+    await logProgress(page, `[脚本${multiLabel}] 正在搜索达人：「${options.creatorSearch || ''}」`)
     result.creatorSearch = await applyCreatorKeywordSearch(page, options)
     if (!result.creatorSearch.ok) {
       result.error = result.creatorSearch.error
       result.finalUrl = page.url()
       result.bodyPreview = await safeBodyPreview(page)
+      await logProgress(page, `[脚本${multiLabel}] 达人搜索失败`)
       return result
     }
 
+    await logProgress(
+      page,
+      `[脚本${multiLabel}] 正在设置排序${options.randomSort ? '（随机）' : options.creatorSortBy ? `：${options.creatorSortBy}` : ''}`,
+    )
     result.creatorSort = await applyCreatorSort(page, options)
     if (!result.creatorSort.ok) {
       result.error = result.creatorSort.error
       result.finalUrl = page.url()
       result.bodyPreview = await safeBodyPreview(page)
+      await logProgress(page, `[脚本${multiLabel}] 排序设置失败`)
       return result
     }
 
@@ -3100,18 +3422,13 @@ async function runForRegion(page, shopRegion, options) {
         return result
       }
 
-      // 填写表单；dry-run 会停在发送前，便于验证商品搜索、佣金等表单步骤。
+      // 填写表单并发送邀约。
       result.formFill = await fillInvitationForm(page, options)
-      if (options.dryRun) {
-        result.finalInvite = { ok: true, dryRun: true, clicked: false, text: '已填写创建邀约表单，未提交' }
-        result.ok = Boolean(result.formFill?.ok)
-      } else {
-        result.ok = Boolean(result.formFill?.submitted)
-        if (!result.ok) result.error = result.formFill?.error || 'Invitation form was not submitted'
-      }
+      result.ok = Boolean(result.formFill?.submitted)
+      if (!result.ok) result.error = result.formFill?.error || 'Invitation form was not submitted'
       result.finalUrl = page.url()
       result.bodyPreview = await safeBodyPreview(page)
-      if (!options.dryRun && result.ok && /合作邀请发送成功|邀请发送成功/.test(result.bodyPreview || '')) {
+      if (result.ok && /合作邀请发送成功|邀请发送成功/.test(result.bodyPreview || '')) {
         result.invitedLedger = recordInvitedCreatorsForProducts(
           options.productIds,
           result.selectedCreators?.selectedCreators || [],
@@ -3131,15 +3448,10 @@ async function runForRegion(page, shopRegion, options) {
       return result
     }
 
-    if (options.dryRun) {
-      result.finalInvite = { ok: true, dryRun: true, clicked: false, text: TEXT_INVITE }
-      result.ok = true
-    } else {
-      result.finalInvite = await clickFinalInvite(page, options)
-      result.ok = Boolean(result.finalInvite.ok)
-      await page.waitForLoadState('networkidle', { timeout: options.networkIdleTimeoutMs }).catch(() => {})
-      await sleep(options.afterFinalInviteMs)
-    }
+    result.finalInvite = await clickFinalInvite(page, options)
+    result.ok = Boolean(result.finalInvite.ok)
+    await page.waitForLoadState('networkidle', { timeout: options.networkIdleTimeoutMs }).catch(() => {})
+    await sleep(options.afterFinalInviteMs)
 
     result.finalUrl = page.url()
     result.bodyPreview = await safeBodyPreview(page)
@@ -3154,7 +3466,6 @@ async function runForRegion(page, shopRegion, options) {
 
 async function main() {
   const shopRegions = parseShopRegions(getArgValue('--shop_region'))
-  const dryRun = hasFlag('--dryRun')
   const productCategoryArg = parseListArg('--product_category')
   const avgCommissionRateArg = parseListArg('--avg_commission_rate')
   const dropdownFilters = {
@@ -3211,7 +3522,6 @@ async function main() {
   const creatorSortBy = getArgValue('--sort_by') || getArgValue('--creator_sort_by')
 
   const options = {
-    dryRun,
     useNewFlow: hasFlag('--useNewFlow'), // 新流程：创建新邀约
     maxCreators: Math.min(getNumberArg('--max_creators', 50), 50),
     scrollRounds: getNumberArg('--scroll_rounds', 40),
@@ -3230,7 +3540,7 @@ async function main() {
     networkIdleTimeoutMs: getNumberArg('--network_idle_timeout_ms', 12000),
     duplicateReselectAttempts: getNumberArg('--duplicate_reselect_attempts', 3),
     // 新流程参数
-    invitationName: getArgValue('--invitation_name') || (dryRun && !hasFlag('--useNewFlow') ? '' : generateDefaultInvitationName()),
+    invitationName: getArgValue('--invitation_name') || generateDefaultInvitationName(),
     invitationText: getArgValue('--invitation_text') || DEFAULT_INVITATION_TEXT,
     expirationDays: getNumberArg('--expiration_days', 365), // 默认一年
     facebookAccount: getArgValue('--facebook') || DEFAULT_FACEBOOK,
@@ -3253,32 +3563,75 @@ async function main() {
     },
   }
 
+  const keepOpen = hasFlag('--keepOpen')
+  const totalRegions = shopRegions.length
   const startUrl = buildCreatorUrl(shopRegions[0])
   const connection = await connectBrowser(startUrl)
   const page = await getActivePage(connection.browser, startUrl)
   page.setDefaultTimeout(12000)
+  await openScriptArgsPanel(connection.browser, { scriptDir: SCRIPT_DIR })
 
   const results = []
   try {
-    for (const shopRegion of shopRegions) {
-      console.log(`[${shopRegion}] ${dryRun ? 'prepare' : 'submit'} affiliate bulk invite`)
-      results.push(await runForRegion(page, shopRegion, options))
+    for (let ri = 0; ri < shopRegions.length; ri += 1) {
+      const shopRegion = shopRegions[ri]
+      const multiLabel = totalRegions > 1 ? ` [区域 ${ri + 1}/${totalRegions} · ${shopRegion}]` : ''
+      await logProgress(
+        page,
+        `[脚本] 开始联盟批量邀约达人${multiLabel}：区域 ${shopRegion}，最多 ${options.maxCreators} 人`,
+      )
+      const regionResult = await runForRegion(page, shopRegion, { ...options, multiLabel })
+      results.push(regionResult)
+
+      if (totalRegions > 1 && ri + 1 < shopRegions.length) {
+        const nextRegion = shopRegions[ri + 1]
+        await logProgress(
+          page,
+          `[脚本] 区域 ${shopRegion} ${regionResult.ok ? '已完成' : '未完成'}，继续下一区域：${nextRegion}`,
+        )
+      }
     }
+
+    const allOk = results.every((x) => x.ok)
+    const summary = {
+      ok: allOk,
+      cdpUrl: connection.cdpUrl,
+      shopRegions,
+      results,
+    }
+    console.log(JSON.stringify(summary, null, 2))
+    if (!allOk) process.exitCode = 1
+
+    if (totalRegions === 1) {
+      const result = results[0]
+      await showPageResultModalUntilAck(page, {
+        title: result.ok ? '联盟邀约任务已完成' : '联盟邀约任务结束',
+        variant: result.error ? 'danger' : result.ok ? 'success' : 'warning',
+        lines: [...buildAffiliateResultLines(result), '', '终端已输出完整 JSON。点击「确定」关闭。'],
+      })
+    } else if (results.length > 0) {
+      const summaryLines = [
+        `配置区域（共 ${totalRegions} 个）：${shopRegions.join('、')}`,
+        '',
+        '分项如下：',
+        '',
+      ]
+      for (const result of results) {
+        summaryLines.push(`「${result.shopRegion}」· ${result.ok ? '已完成' : '未完成'}`)
+        summaryLines.push(...buildAffiliateResultLines(result).map((line) => (line ? `  ${line}` : line)))
+        summaryLines.push('')
+      }
+      await showPageResultModalUntilAck(page, {
+        title: allOk ? '联盟邀约任务已完成' : '联盟邀约任务结束（部分未完成）',
+        variant: allOk ? 'success' : 'warning',
+        lines: summaryLines,
+      })
+    }
+
+    if (keepOpen) await new Promise(() => {})
   } finally {
-    if (connection.closeBrowser) await connection.browser.close().catch(() => {})
+    if (connection.closeBrowser && !keepOpen) await connection.browser.close().catch(() => {})
   }
-
-  const summary = {
-    ok: results.every((x) => x.ok),
-    dryRun,
-    cdpUrl: connection.cdpUrl,
-    shopRegions,
-    results,
-  }
-
-  console.log(JSON.stringify(summary, null, 2))
-  if (!summary.ok) process.exitCode = 1
-  if (hasFlag('--keepOpen')) setTimeout(() => process.exit(process.exitCode || 0), 50)
 }
 
 main().catch((err) => {

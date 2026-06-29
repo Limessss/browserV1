@@ -38,9 +38,13 @@ import { getLaunchServerActiveTarget } from './launch-server-state'
 import { parseJsonArray, type ProfileRow } from './browser-data'
 import { getSqlite } from './database/sqlite-store'
 import {
+  getEffectiveDefaultArgs,
   killPlaywrightScriptRun,
   listPlaywrightScripts,
+  loadUserDefaultArgsForScript,
+  loadUserDefaultsFileForScript,
   runPlaywrightScript,
+  saveUserDefaultArgsForFolder,
   type PlaywrightScriptItem,
 } from './playwright-scripts-service'
 
@@ -372,18 +376,91 @@ function playwrightScriptToPublic(item: PlaywrightScriptItem): Record<string, un
   }
 }
 
+async function enrichPlaywrightScriptPublic(
+  item: PlaywrightScriptItem,
+): Promise<Record<string, unknown>> {
+  const userFile = await loadUserDefaultsFileForScript(item)
+  const userDefaultArgs = userFile?.defaultArgs
+  const effectiveDefaultArgs = getEffectiveDefaultArgs(item, userDefaultArgs ?? null)
+  return {
+    ...playwrightScriptToPublic(item),
+    userDefaultArgs: userDefaultArgs?.length ? userDefaultArgs : undefined,
+    userDefaultArgsUpdatedAt: userFile?.updatedAt || undefined,
+    effectiveDefaultArgs,
+    hasUserDefaultOverrides: Boolean(userDefaultArgs && userDefaultArgs.length > 0),
+  }
+}
+
 async function handlePlaywrightScriptsList(res: ServerResponse): Promise<void> {
   try {
     const result = await listPlaywrightScripts()
+    const scripts = await Promise.all(result.scripts.map((item) => enrichPlaywrightScriptPublic(item)))
     writeJson(res, 200, {
       ok: true,
       rootDir: result.rootDir,
       bundledRootDir: result.bundledRootDir,
       warnings: result.warnings,
-      scripts: result.scripts.map(playwrightScriptToPublic),
+      scripts,
     })
   } catch (e) {
     writeJson(res, 500, { ok: false, error: String(e instanceof Error ? e.message : e) })
+  }
+}
+
+async function handlePlaywrightScriptUserDefaultsGet(
+  res: ServerResponse,
+  folderId: string,
+): Promise<void> {
+  const fid = String(folderId ?? '').trim()
+  try {
+    const result = await listPlaywrightScripts()
+    const script = result.scripts.find((s) => s.folderId === fid)
+    if (!script) {
+      writeJson(res, 404, { ok: false, error: `未找到脚本: ${fid}` })
+      return
+    }
+    const userFile = await loadUserDefaultsFileForScript(script)
+    writeJson(res, 200, {
+      ok: true,
+      folderId: fid,
+      scriptId: script.id ?? fid,
+      manifestDefaultArgs: script.defaultArgs ?? [],
+      userDefaultArgs: userFile?.defaultArgs ?? null,
+      updatedAt: userFile?.updatedAt ?? null,
+      effectiveDefaultArgs: getEffectiveDefaultArgs(script, userFile?.defaultArgs ?? null),
+    })
+  } catch (e) {
+    writeJson(res, 500, { ok: false, error: String(e instanceof Error ? e.message : e) })
+  }
+}
+
+async function handlePlaywrightScriptUserDefaultsPut(
+  req: IncomingMessage,
+  res: ServerResponse,
+  folderId: string,
+): Promise<void> {
+  let raw: unknown
+  try {
+    raw = await readBodyJson(req)
+  } catch {
+    writeJson(res, 400, { ok: false, error: 'invalid request body' })
+    return
+  }
+  const body = raw as Record<string, unknown>
+  if (!Array.isArray(body.defaultArgs) || !body.defaultArgs.every((a) => typeof a === 'string')) {
+    writeJson(res, 400, { ok: false, error: 'defaultArgs must be a string array' })
+    return
+  }
+  try {
+    const saved = await saveUserDefaultArgsForFolder(folderId, body.defaultArgs)
+    writeJson(res, 200, { ok: true, folderId, ...saved })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes('未找到脚本')) {
+      writeJson(res, 404, { ok: false, error: msg })
+      return
+    }
+    writeJson(res, 500, { ok: false, error: msg })
   }
 }
 
@@ -708,6 +785,22 @@ async function handleLaunchHttpRequest(req: IncomingMessage, res: ServerResponse
     if (pathname === '/api/playwright-scripts/run' && method === 'POST') {
       await handlePlaywrightScriptRunPost(req, res)
       return
+    }
+
+    {
+      const userDefaultsMatch = /^\/api\/playwright-scripts\/([^/]+)\/user-default-args$/.exec(pathname)
+      if (userDefaultsMatch) {
+        if (method === 'GET') {
+          await handlePlaywrightScriptUserDefaultsGet(res, userDefaultsMatch[1])
+          return
+        }
+        if (method === 'PUT') {
+          await handlePlaywrightScriptUserDefaultsPut(req, res, userDefaultsMatch[1])
+          return
+        }
+        writeJson(res, 405, { ok: false, error: 'method not allowed' })
+        return
+      }
     }
 
     {

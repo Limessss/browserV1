@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * TikTok 自动关键词提报（主流程，v0.9.2 — discovered 按 lead/list API 顺序 + 虚拟滚动兜底）。
+ * TikTok 自动关键词提报（主流程，v0.9.5 — 视口已提报时向下滚动表格加载更多关键词）。
  *
  * 经真实浏览器探针验证后的关键事实（探针位置 _temp/probe_*.mjs）：
  *   - lead/list endpoint 真实可用（v6），opportunity_type=202，total_product_count=500；
@@ -13,12 +13,9 @@
  *   - 关键词列表 100% 走 lead/list API，DOM 仅做页面健康检查（v3/v4/v5 确认虚拟滚动
  *     只能拿到 ~12 行）。
  *
- * 用法（dry-run）：
+ * 用法（需在应用「系统设置 → 第三方接口配置」中保存链氪 ERP Key）：
  *   node playwright_scripts/tiktok_auto_keyword_submit/tiktok_auto_keyword_submit.mjs \
- *       --useLaunchApi --code GMNQ5O --shop_region PH --dryRun --limit 3
- *
- * 真实提报（去掉 --dryRun；需在应用「系统设置 → 第三方接口配置」中保存链氪 ERP Key）：
- *   node ... --useLaunchApi --code GMNQ5O --shop_region PH
+ *       --useLaunchApi --code GMNQ5O --shop_region PH
  */
 
 import { chromium } from 'playwright'
@@ -27,6 +24,10 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
+import { showPageToast, showPageResultModalUntilAck } from '../_lib/page_runtime_ui.mjs'
+import { openScriptArgsPanel } from '../_lib/script_args_panel.mjs'
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 
 const TRENDING_KEYWORDS_URL =
   'https://seller.tiktokshopglobalselling.com/product/opportunity?shop_region=PH&sort_field=1&use_like=false&tab=trending_keywords'
@@ -41,11 +42,8 @@ const DEFAULT_LEAD_PAGE_SIZE = 100
 const MAX_LEAD_PAGES = 8
 const OPPORTUNITY_TYPE = 202
 const USER_ACTION = 'trending_keyword'
-
-const PAGE_TOAST_DOM_ID = 'ant-playwright-top-toast'
-const PAGE_MODAL_ROOT_ID = 'ant-playwright-result-modal'
-const PAGE_TOAST_MS = 3000
-const PAGE_MODAL_IDLE_BROWSER_CLOSE_MS = 60 * 1000
+/** 视口内关键词均已提报时，向下滚动表格的最大轮数（v0.9.5 / Live Bridge 0ZF9ZK PH 验证） */
+const DISCOVER_SCROLL_MAX_ROUNDS = 50
 
 function getArgValue(flagName) {
   const idx = process.argv.indexOf(flagName)
@@ -203,7 +201,7 @@ function parseShopRegions(raw) {
 // ============== SQLite 持久化（v0.9 — 防止同 lead/product 重复提报） ==============
 // 表 lead_submissions：UNIQUE(lead_name, product_id, shop_id, region) WHERE status='submitted'
 // 启动时建表；启动时把已成功提报的 lead_name 集合传给 discovered 过滤；
-// 每次提报成功后 INSERT OR IGNORE；dry-run 也写（status=dryRun）便于回放分析。
+// 每次提报成功后 INSERT OR IGNORE。
 function openSubmissionsDb({ dbPath, reset }) {
   if (reset && existsSync(dbPath)) {
     rmSync(dbPath)
@@ -248,16 +246,8 @@ function recordSubmission(db, { leadName, leadId, productId, shopId, region, sta
   return res.changes || 0
 }
 
-function getSubmittedLeads(db, { shopId, region, strictDryRun = false }) {
-  // strictDryRun=false（默认）：只把真实 status='submitted' 当作"已提报"
-  // strictDryRun=true：dry-run 跑过的 lead 也当作"已尝试"→ discovered 不再重复发现
-  //   用于在 dry-run 阶段预演去重效果
-  const stmt = strictDryRun
-    ? db.prepare(`
-        SELECT DISTINCT lead_name FROM lead_submissions
-        WHERE shop_id = ? AND region = ? AND status IN ('submitted','dryRun')
-      `)
-    : db.prepare(`
+function getSubmittedLeads(db, { shopId, region }) {
+  const stmt = db.prepare(`
         SELECT DISTINCT lead_name FROM lead_submissions
         WHERE shop_id = ? AND region = ? AND status = 'submitted'
       `)
@@ -266,15 +256,8 @@ function getSubmittedLeads(db, { shopId, region, strictDryRun = false }) {
   return new Set(rows.map((r) => r.lead_name))
 }
 
-function isProductSubmitted(db, { leadName, productId, shopId, region, strictDryRun = false }) {
-  const stmt = strictDryRun
-    ? db.prepare(`
-        SELECT 1 FROM lead_submissions
-        WHERE lead_name = ? AND product_id = ? AND shop_id = ? AND region = ?
-          AND status IN ('submitted','dryRun')
-        LIMIT 1
-      `)
-    : db.prepare(`
+function isProductSubmitted(db, { leadName, productId, shopId, region }) {
+  const stmt = db.prepare(`
         SELECT 1 FROM lead_submissions
         WHERE lead_name = ? AND product_id = ? AND shop_id = ? AND region = ?
           AND status = 'submitted'
@@ -285,13 +268,8 @@ function isProductSubmitted(db, { leadName, productId, shopId, region, strictDry
   return Boolean(row)
 }
 
-function getSubmittedProductIds(db, { leadName, shopId, region, strictDryRun = false }) {
-  const stmt = strictDryRun
-    ? db.prepare(`
-        SELECT product_id FROM lead_submissions
-        WHERE lead_name = ? AND shop_id = ? AND region = ? AND status IN ('submitted','dryRun')
-      `)
-    : db.prepare(`
+function getSubmittedProductIds(db, { leadName, shopId, region }) {
+  const stmt = db.prepare(`
         SELECT product_id FROM lead_submissions
         WHERE lead_name = ? AND shop_id = ? AND region = ? AND status = 'submitted'
       `)
@@ -330,20 +308,31 @@ async function erpGetUserInfo({ base, apiKey }) {
 
 async function erpSearchByKeyword({ base, apiKey, shopPk, keyword, topN }) {
   const url = `${base}/api/tiktok/product/search_by_keyword/`
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey, Accept: 'application/json' },
-    body: JSON.stringify({ shop_pk: Number(shopPk), keyword: String(keyword || '').trim(), top_n: Number(topN) || 5 }),
-  })
-  const text = await r.text()
-  let data = null
-  try { data = text ? JSON.parse(text) : null } catch (_) { /* keep null */ }
-  if (!r.ok) {
-    const msg = (data && (data.msg || data.detail)) || `HTTP ${r.status}`
-    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg))
+  const body = JSON.stringify({ shop_pk: Number(shopPk), keyword: String(keyword || '').trim(), top_n: Number(topN) || 5 })
+  const headers = { 'Content-Type': 'application/json', 'X-Api-Key': apiKey, Accept: 'application/json' }
+  let lastErr = null
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    let r
+    try {
+      r = await fetch(url, { method: 'POST', headers, body })
+    } catch (e) {
+      lastErr = e
+      const msg = e instanceof Error ? e.message : String(e)
+      logStep(`  search_by_keyword attempt ${attempt} 网络异常: ${msg}，1.5s 后重试`)
+      await sleep(1500)
+      continue
+    }
+    const text = await r.text()
+    let data = null
+    try { data = text ? JSON.parse(text) : null } catch (_) { /* keep null */ }
+    if (!r.ok) {
+      const msg = (data && (data.msg || data.detail)) || `HTTP ${r.status}`
+      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    }
+    const items = Array.isArray(data?.result?.items) ? data.result.items : []
+    return items
   }
-  const items = Array.isArray(data?.result?.items) ? data.result.items : []
-  return items
+  throw new Error(`search_by_keyword 网络异常（3 次重试均失败）: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`)
 }
 
 function findShopPkByShopId(userInfo, pageShopId, pageRegion) {
@@ -363,6 +352,300 @@ function findShopPkByShopId(userInfo, pageShopId, pageRegion) {
   const fuzzy = tiktokShops.find((s) => compact(s.shop_id) === target)
   if (fuzzy?.id) return { match: fuzzy, mode: 'fuzzy' }
   return null
+}
+
+/** 商品机会页「关键词」Tab 文案（含 i18n 兜底） */
+const KEYWORD_TAB_LABELS = ['关键词', '热门关键词', 'Keywords', 'Keyword']
+
+/**
+ * 判断当前是否已在「关键词 / trending_keywords」Tab。
+ * URL 带 tab=trending_keywords 时部分店铺仍默认停在「精选」，不能只看 URL。
+ */
+async function isOnTrendingKeywordsTab(page) {
+  return page.evaluate(() => {
+    const compact = (s) => String(s || '').replace(/\s+/g, ' ').trim()
+    const isKwRow = (t) => t.includes('搜索关键词') || t.includes('搜索次数')
+      || (/添加同款商品|查看详情/.test(t) && !t.includes('全球畅销'))
+    const keywordRows = Array.from(document.querySelectorAll('div.core-table-tr')).filter((tr) => {
+      return isKwRow(compact(tr.textContent))
+    })
+    if (keywordRows.length > 0) return true
+
+    const activeSelectors = [
+      '[role="tab"][aria-selected="true"]',
+      '.core-tabs-tab-active',
+      '.arco-tabs-tab-active',
+      '[class*="tabs-tab-active"]',
+    ]
+    for (const sel of activeSelectors) {
+      const el = document.querySelector(sel)
+      if (!el) continue
+      const t = compact(el.textContent)
+      if (t.includes('关键词') || t.includes('Keywords') || t.includes('热门关键词')) return true
+      if (t.includes('精选') || t.includes('Featured')) return false
+    }
+
+    const snippet = compact(document.body?.innerText?.slice(0, 4000) || '')
+    if (snippet.includes('全球畅销商品') && !snippet.includes('搜索次数') && !snippet.includes('搜索关键词')) return false
+    return false
+  })
+}
+
+/** 点击顶部「关键词」Tab（Playwright role 优先，DOM 兜底） */
+async function clickTrendingKeywordsTab(page) {
+  for (const label of KEYWORD_TAB_LABELS) {
+    const tab = page.getByRole('tab', { name: new RegExp(label) }).first()
+    if (await tab.count() > 0) {
+      try {
+        await tab.click({ timeout: 8000 })
+        return { clicked: true, label }
+      } catch { /* try next */ }
+    }
+  }
+  return page.evaluate((labels) => {
+    const compact = (s) => String(s || '').replace(/\s+/g, ' ').trim()
+    const isTabLike = (el) => {
+      const r = el.getBoundingClientRect()
+      if (r.width <= 0 || r.height <= 0 || r.width > 240) return false
+      const role = el.getAttribute('role')
+      const cls = el.className || ''
+      return role === 'tab' || String(cls).includes('tab')
+    }
+    const nodes = Array.from(document.querySelectorAll('[role="tab"], [class*="tabs-tab"], [class*="tab-item"]'))
+    for (const label of labels) {
+      for (const el of nodes) {
+        const t = compact(el.textContent)
+        if (t !== label && !t.startsWith(label)) continue
+        if (!isTabLike(el) && el.tagName !== 'BUTTON') continue
+        el.click()
+        return { clicked: true, text: t }
+      }
+    }
+    for (const label of labels) {
+      for (const el of document.querySelectorAll('div, span, button')) {
+        const t = compact(el.textContent)
+        if (t !== label) continue
+        const r = el.getBoundingClientRect()
+        if (r.width <= 0 || r.height <= 0 || r.top > 400 || r.width > 200) continue
+        el.click()
+        return { clicked: true, text: t }
+      }
+    }
+    return { clicked: false }
+  }, KEYWORD_TAB_LABELS)
+}
+
+/**
+ * 部分店铺 URL 虽带 tab=trending_keywords，首屏仍停在「精选」——必须显式切到「关键词」。
+ */
+async function ensureTrendingKeywordsTab(page, { waitMs = 8000, regionLabel = '' } = {}) {
+  if (await isOnTrendingKeywordsTab(page)) {
+    logStep('keywords tab already active')
+    return { switched: false }
+  }
+  logStep('不在关键词 Tab（可能停在精选），切换到「关键词」')
+  try { await showPageToast(page, `[脚本${regionLabel}] 切换到「关键词」Tab…`) } catch { /* ignore */ }
+  const clickResult = await clickTrendingKeywordsTab(page)
+  if (!clickResult.clicked) {
+    throw new Error('未找到「关键词」Tab，无法从精选页切换')
+  }
+  logStep(`已点击关键词 Tab: ${clickResult.label || clickResult.text || '关键词'}`)
+  const tableReady = await waitForKeywordTableRows(page, Math.min(waitMs + 7000, 15000))
+  if (tableReady) {
+    logStep('关键词表格已就绪')
+  } else {
+    logStep('警告: 点击关键词 Tab 后表格仍未就绪，继续尝试')
+  }
+  return { switched: true, tableReady, ...clickResult }
+}
+
+/** 切换 Tab 后轮询，直到关键词表格行出现 */
+async function waitForKeywordTableRows(page, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const ready = await page.evaluate(() => {
+      const compact = (s) => String(s || '').replace(/\s+/g, ' ').trim()
+      return Array.from(document.querySelectorAll('div.core-table-tr')).some((tr) => {
+        const t = compact(tr.textContent)
+        return t.includes('搜索关键词') || t.includes('搜索次数')
+          || (/添加同款商品|查看详情/.test(t) && !t.includes('全球畅销'))
+      })
+    })
+    if (ready) return true
+    await sleep(500)
+  }
+  return false
+}
+
+/** goto 机会页 + 等待渲染 + 确保停在「关键词」Tab */
+async function gotoTrendingKeywordsPage(page, targetUrl, { navTimeoutMs, waitMs, regionLabel = '' }) {
+  await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: navTimeoutMs })
+  logStep(`domcontentloaded, current URL: ${page.url()}`)
+  logStep(`waiting ${waitMs}ms for client render`)
+  await sleep(waitMs)
+  await ensureTrendingKeywordsTab(page, { waitMs, regionLabel })
+}
+
+async function resetKeywordTableScroll(page) {
+  await page.evaluate(() => {
+    const body = document.querySelector('.core-table-body')
+      || document.querySelector('[class*="table-body"]')
+    if (body) {
+      body.scrollTop = 0
+      body.dispatchEvent(new Event('scroll', { bubbles: true }))
+    }
+    document.scrollingElement.scrollTop = 0
+  })
+  await sleep(350)
+}
+
+/** 向下滚 `.core-table-body`（rc-virtual-list），触发加载更多关键词行 */
+async function scrollKeywordTableBody(page) {
+  return page.evaluate(() => {
+    const visible = (el) => {
+      const st = getComputedStyle(el)
+      const r = el.getBoundingClientRect()
+      return st.display !== 'none' && st.visibility !== 'hidden' && r.width > 0 && r.height > 0
+    }
+    const body = document.querySelector('.core-table-body')
+      || [...document.querySelectorAll('[class*="table-body"],.rc-virtual-list-holder')]
+        .find((el) => visible(el) && el.scrollHeight > el.clientHeight + 50)
+    if (!body) return { scrolled: false, atBottom: true, scrollTop: 0, scrollHeight: 0 }
+    const beforeTop = body.scrollTop
+    const beforeHeight = body.scrollHeight
+    const step = Math.max(280, Math.floor(body.clientHeight * 0.65))
+    body.scrollTop = Math.min(body.scrollTop + step, body.scrollHeight)
+    body.dispatchEvent(new Event('scroll', { bubbles: true }))
+    window.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: step }))
+    const atBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 8
+    const stuck = body.scrollTop === beforeTop && atBottom
+    return {
+      scrolled: body.scrollTop > beforeTop || body.scrollHeight > beforeHeight,
+      atBottom: stuck || atBottom,
+      scrollTop: body.scrollTop,
+      scrollHeight: body.scrollHeight,
+    }
+  })
+}
+
+/**
+ * 在当前 DOM 视口内按 lead/list API 顺序找第一条未提报关键词（不含滚动）。
+ * 由 discoverNextLeadName 循环调用；滚动逻辑在 Playwright 侧。
+ */
+async function readDiscoveredLeadNamesInViewport(page) {
+  return page.evaluate(async () => {
+    const compact = (s) => String(s || '').replace(/\s+/g, ' ').trim()
+    const submittedLeads = new Set(Array.isArray(window.__SUBMITTED_LEADS__) ? window.__SUBMITTED_LEADS__ : [])
+    const apiOrder = Array.isArray(window.__API_LEAD_ORDER__) ? window.__API_LEAD_ORDER__ : []
+
+    const readVisibleLeads = () => {
+      const rows = Array.from(document.querySelectorAll('div.core-table-tr')).filter((el) => {
+        const r = el.getBoundingClientRect()
+        const st = window.getComputedStyle(el)
+        return r.width > 0 && r.height > 0 && st.visibility !== 'hidden' && st.display !== 'none'
+      })
+      const map = new Map()
+      for (const tr of rows) {
+        const text = compact(tr.textContent)
+        if (text.includes('已提报') || text.includes('审核中') || text.includes('已批准') || text.includes('已驳回')) continue
+        const isKwRow = text.includes('搜索关键词') || text.includes('搜索次数')
+          || (/添加同款商品|查看详情/.test(text) && !text.includes('全球畅销'))
+        if (!isKwRow && !/^#\s+/m.test(text)) continue
+
+        let name = ''
+        const hashMatch = text.match(/^#\s*([^\n]+?)(?=Womenswear|Menswear|全球|$)/)
+        if (hashMatch) name = hashMatch[1].trim()
+
+        if (!name) {
+          const recMatch = text.match(/^(.+?)(?:推荐\+|搜索次数|搜索关键词)/)
+          if (recMatch) name = recMatch[1].trim()
+        }
+
+        if (!name) {
+          for (const apiName of apiOrder) {
+            if (apiName && text.includes(apiName)) {
+              name = apiName
+              break
+            }
+          }
+        }
+
+        if (!name && text.includes('搜索关键词')) {
+          const kwMatch = text.match(/^#\s*(.+?)搜索关键词/)
+          if (kwMatch) name = kwMatch[1].trim()
+        }
+
+        if (!name) continue
+        if (submittedLeads.has(name)) continue
+        if (!map.has(name)) map.set(name, { row: tr, text })
+      }
+      return map
+    }
+
+    const nudgeScroll = () => {
+      const sc = document.scrollingElement || document.documentElement
+      const delta = Math.round(window.innerHeight * 0.6)
+      sc.scrollTop = sc.scrollTop + delta
+      return new Promise((resolve) => requestAnimationFrame(() => {
+        sc.scrollTop = sc.scrollTop - delta
+        requestAnimationFrame(() => resolve())
+      }))
+    }
+
+    let visible = readVisibleLeads()
+    if (!apiOrder.some((n) => visible.has(n))) {
+      await nudgeScroll()
+      await new Promise((r) => setTimeout(r, 300))
+      visible = readVisibleLeads()
+    }
+
+    const out = []
+    for (const name of apiOrder) {
+      if (visible.has(name)) {
+        out.push(name)
+        if (out.length >= 30) break
+      }
+    }
+    if (out.length === 0) {
+      for (const [name] of visible) {
+        out.push(name)
+        if (out.length >= 30) break
+      }
+    }
+    return out
+  })
+}
+
+/** 视口内找不到未提报关键词时，向下滚动表格直到发现或到底 */
+async function discoverNextLeadName(page, { submittedLeadsFromDb, apiLeadNameOrder, maxScrollRounds = DISCOVER_SCROLL_MAX_ROUNDS }) {
+  try {
+    await page.evaluate((leads) => { window.__SUBMITTED_LEADS__ = leads; }, [...submittedLeadsFromDb])
+    await page.evaluate((names) => { window.__API_LEAD_ORDER__ = names; }, apiLeadNameOrder)
+  } catch { /* ignore */ }
+
+  await resetKeywordTableScroll(page)
+
+  for (let round = 0; round <= maxScrollRounds; round += 1) {
+    const discovered = await readDiscoveredLeadNamesInViewport(page)
+    if (discovered.length) {
+      if (round > 0) {
+        logStep(`  向下滚动 ${round} 次后发现未提报关键词: "${discovered[0].slice(0, 72)}"`)
+      }
+      return discovered[0]
+    }
+    if (round === maxScrollRounds) break
+
+    if (round === 0) {
+      logStep('  当前视口关键词均已提报或不可见，向下滚动加载更多…')
+    }
+    const scrollMeta = await scrollKeywordTableBody(page)
+    if (!scrollMeta.scrolled && scrollMeta.atBottom) {
+      logStep(`  关键词列表已滚到底（scrollTop=${scrollMeta.scrollTop}/${scrollMeta.scrollHeight}），无更多未提报行`)
+      break
+    }
+    await sleep(450)
+  }
+  return ''
 }
 
 // ============== 页面主世界：lead/list API（v6 探针验证） ==============
@@ -392,6 +675,28 @@ async function fetchLeadListAll({ page, pageSize = DEFAULT_LEAD_PAGE_SIZE, maxPa
 // ============== DOM 提报（v17 真实探针验证：单 lead + 单 productId 完整三步真实提报） ==============
 // 注意：v18 探针误读为"多商品循环 search+勾选+一次性提交"——真实生产中**第二次 search
 //  会覆盖第一次的"已选"**。正确流程是**单商品单 drawer 单提交**，每个 productId 独立走一遍。
+/** v28 探针：legacy 点行 / new UI 点行内「添加同款商品」——须用 Playwright 点击（evaluate.click 无效） */
+async function openLeadOpportunityDrawer(page, leadName) {
+  await page.keyboard.press('Escape').catch(() => {})
+  await sleep(800)
+  const row = page.locator('div.core-table-tr').filter({ hasText: leadName }).first()
+  await row.scrollIntoViewIfNeeded().catch(() => {})
+  const rowText = await row.innerText().catch(() => '')
+  const isNewUi = rowText.includes('添加同款商品') && !/^\s*#/.test(rowText)
+  if (isNewUi) {
+    await row.getByText('添加同款商品', { exact: true }).click({ force: true, timeout: 10_000 })
+  } else {
+    await row.click({ timeout: 10_000 })
+  }
+  await sleep(3000)
+  const bind = page.getByRole('button', { name: /绑定现有商品/ }).first()
+  if (await bind.count() === 0) {
+    throw new Error('打开机会 drawer 后未找到「绑定现有商品」按钮')
+  }
+  await bind.click({ timeout: 10_000 })
+  await sleep(2500)
+}
+
 const DOM_STEP1_JS = `async (productId) => {
   const compact = (s) => String(s || '').replace(/\\s+/g, ' ').trim();
   const visible = (el) => {
@@ -411,29 +716,9 @@ const DOM_STEP1_JS = `async (productId) => {
   // ——不是 fatal，主流程应跳过本 product 继续下一个，不计入 row.success。
   const out = { ok: false, skipped: false, error: '', steps: [] };
 
-  // 1) 行 click
-  const keyword = String(window.__PENDING_KEYWORD__ || '').trim();
-  const allRowDivs = Array.from(document.querySelectorAll('div.core-table-tr')).filter(visible);
-  const row = allRowDivs.find((d) => compact(d.textContent).includes(keyword));
-  if (!row) { out.error = 'row not found for keyword: ' + keyword; out.skipped = true; return out; }
-  row.scrollIntoView({ block: 'center' });
-  await sleep(300);
-  row.click();
-  out.steps.push({ step: 'row-click' });
-  await sleep(1500);
+  // drawer 已由 openLeadOpportunityDrawer（Playwright）打开并完成「绑定现有商品」点击
 
-  // 2) 点 "绑定现有商品"
-  const allButtons = Array.from(document.querySelectorAll('button, [role="button"]')).filter(visible);
-  const bindBtn = allButtons.find((b) => {
-    const t = compact(b.textContent);
-    return t === '绑定现有商品' || t.includes('绑定现有商品');
-  });
-  if (!bindBtn) { out.error = '未找到「绑定现有商品」按钮'; out.skipped = true; return out; }
-  bindBtn.click();
-  out.steps.push({ step: 'click-bind' });
-  await sleep(2500);
-
-  // 3) 搜索 productId（按下 Enter）
+  // 1) 搜索 productId（按下 Enter）
   const inputs = Array.from(document.querySelectorAll('input')).filter(visible);
   const searchInput = inputs.find((el) => el.getAttribute('placeholder') === '搜索商品名称');
   if (!searchInput) { out.error = '未找到商品搜索输入框'; out.skipped = true; return out; }
@@ -512,202 +797,17 @@ const DOM_SUBMIT_JS = `async () => {
 }`
 
 async function domStep1SingleProduct(page, leadName, productId) {
-  return page.evaluate(
-    `(() => { window.__PENDING_KEYWORD__ = ${JSON.stringify(leadName)}; return (${DOM_STEP1_JS})(${JSON.stringify(productId)}); })()`,
-  )
+  try {
+    await openLeadOpportunityDrawer(page, leadName)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, skipped: true, error: msg, steps: [] }
+  }
+  return page.evaluate(`(${DOM_STEP1_JS})(${JSON.stringify(productId)})`)
 }
 
 async function domSubmitFromStep2(page) {
   return page.evaluate(`(${DOM_SUBMIT_JS})()`)
-}
-
-// ============== page toast / modal ==============
-async function showPageToast(page, message) {
-  const msg = String(message || '').slice(0, 600)
-  try {
-    await page.evaluate(
-      ({ text, ms, rootId }) => {
-        const prev = document.getElementById(rootId)
-        if (prev) prev.remove()
-        const sid = 'ant-playwright-toast-styles'
-        if (!document.getElementById(sid)) {
-          const st = document.createElement('style')
-          st.id = sid
-          st.textContent = `
-@keyframes ant-pw-toast-in { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
-@keyframes ant-pw-toast-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(10px); } }`
-          document.head.appendChild(st)
-        }
-        const root = document.createElement('div')
-        root.id = rootId
-        root.style.cssText = [
-          'position:fixed', 'bottom:0', 'left:0', 'right:0', 'z-index:2147483646',
-          'pointer-events:none', 'display:flex', 'justify-content:center', 'align-items:flex-end',
-          'padding:0 14px 12px', 'box-sizing:border-box',
-          'font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
-          'font-size:13px', 'line-height:1.5',
-        ].join(';')
-        const row = document.createElement('div')
-        row.style.cssText = [
-          'max-width:min(560px,92vw)', 'display:flex', 'align-items:stretch',
-          'border-radius:14px 14px 0 0', 'overflow:hidden',
-          'box-shadow:0 -10px 36px rgba(0,0,0,.42),0 0 0 1px rgba(255,255,255,.07)',
-          'animation:ant-pw-toast-in 0.38s cubic-bezier(.22,1,.36,1) both',
-        ].join(';')
-        const stripe = document.createElement('div')
-        stripe.style.cssText = 'width:5px;flex-shrink:0;background:linear-gradient(180deg,#2dd4bf,#6366f1);'
-        const bar = document.createElement('div')
-        bar.style.cssText = [
-          'flex:1', 'background:linear-gradient(145deg,rgba(32,32,40,.98) 0%,rgba(20,20,26,.99) 100%)',
-          'color:#f4f4f8', 'padding:12px 18px', 'text-align:center', 'word-break:break-word', 'font-weight:500',
-        ].join(';')
-        bar.textContent = text
-        row.appendChild(stripe)
-        row.appendChild(bar)
-        root.appendChild(row)
-        document.body.appendChild(root)
-        window.setTimeout(() => {
-          row.style.animation = 'ant-pw-toast-out 0.28s ease forwards'
-          window.setTimeout(() => root.remove(), 280)
-        }, ms)
-      },
-      { text: msg, ms: PAGE_TOAST_MS, rootId: PAGE_TOAST_DOM_ID },
-    )
-  } catch { /* ignore */ }
-}
-
-async function showPageResultModalUntilAck(page, opts) {
-  const suppressIdleBrowserClose = Boolean(opts.suppressIdleBrowserClose)
-  const title = String(opts.title || '任务结束').slice(0, 200)
-  const variant = opts.variant === 'danger' || opts.variant === 'warning' ? opts.variant : 'success'
-  const lines = (opts.lines || []).map((line) => String(line).slice(0, 2000))
-  const idleCountdownMs = suppressIdleBrowserClose ? 0 : PAGE_MODAL_IDLE_BROWSER_CLOSE_MS
-
-  await page.evaluate(
-    ({ title: t, variant: v, lines: ln, rootId, idleCountdownMs: idleMs }) => {
-      const existing = document.getElementById(rootId)
-      if (existing) existing.remove()
-      const sid = 'ant-playwright-modal-styles'
-      if (!document.getElementById(sid)) {
-        const st = document.createElement('style')
-        st.id = sid
-        st.textContent = `
-@keyframes ant-pw-modal-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes ant-pw-modal-panel-in { from { opacity: 0; transform: translateY(16px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }`
-        document.head.appendChild(st)
-      }
-      const grad =
-        v === 'success' ? 'linear-gradient(135deg,#0d9488 0%,#6366f1 55%,#7c3aed 100%)'
-          : v === 'warning' ? 'linear-gradient(135deg,#d97706 0%,#ea580c 100%)'
-            : 'linear-gradient(135deg,#dc2626 0%,#be185d 100%)'
-      const backdrop = document.createElement('div')
-      backdrop.id = rootId
-      backdrop.style.cssText = [
-        'position:fixed', 'inset:0', 'z-index:2147483647',
-        'display:flex', 'align-items:center', 'justify-content:center', 'padding:24px 16px',
-        'box-sizing:border-box', 'background:rgba(12,12,18,.52)',
-        'backdrop-filter:saturate(1.2) blur(10px)', '-webkit-backdrop-filter:saturate(1.2) blur(10px)',
-        'animation:ant-pw-modal-in 0.28s ease both',
-        'font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
-      ].join(';')
-      const panel = document.createElement('div')
-      panel.style.cssText = [
-        'width:100%', 'max-width:440px', 'max-height:min(72vh,620px)', 'display:flex',
-        'flex-direction:column', 'border-radius:18px', 'overflow:hidden',
-        'box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.08)',
-        'animation:ant-pw-modal-panel-in 0.4s cubic-bezier(.22,1,.36,1) both',
-        'background:#14141a',
-      ].join(';')
-      const head = document.createElement('div')
-      head.style.cssText = `padding:22px 24px 18px;background:${grad};color:#fff`
-      const headTitle = document.createElement('div')
-      headTitle.style.cssText = 'font-size:18px;font-weight:700;line-height:1.35;'
-      headTitle.textContent = t
-      head.appendChild(headTitle)
-      const sub = document.createElement('div')
-      sub.style.cssText = 'margin-top:6px;font-size:12px;opacity:.92;font-weight:500;'
-      sub.textContent = 'Playwright 脚本执行结果'
-      head.appendChild(sub)
-      const body = document.createElement('div')
-      body.style.cssText = [
-        'padding:18px 22px 12px',
-        'background:linear-gradient(180deg,#1a1a22 0%,#14141a 40%)',
-        'color:#e8e8ef', 'overflow:auto', 'flex:1', 'min-height:0',
-      ].join(';')
-      const pre = document.createElement('pre')
-      pre.style.cssText = [
-        'margin:0', 'white-space:pre-wrap', 'word-break:break-word',
-        'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace',
-        'font-size:12.5px', 'line-height:1.65', 'color:#d4d4dc',
-      ].join(';')
-      pre.textContent = ln.length ? ln.join('\n') : '（无详情）'
-      body.appendChild(pre)
-      const foot = document.createElement('div')
-      foot.style.cssText = 'padding:14px 22px 20px;background:#14141a;border-top:1px solid rgba(255,255,255,.06);'
-      const btn = document.createElement('button')
-      btn.type = 'button'
-      btn.setAttribute('data-ant-playwright-modal-ok', '1')
-      btn.textContent = '确定'
-      btn.style.cssText = [
-        'width:100%', 'padding:12px 16px', 'border:none', 'border-radius:12px',
-        'cursor:pointer', 'font-size:15px', 'font-weight:600', 'color:#fff',
-        'background:linear-gradient(135deg,#6366f1,#7c3aed)',
-        'box-shadow:0 8px 24px rgba(99,102,241,.35)',
-      ].join(';')
-      const idleNum = Number(idleMs) || 0
-      if (idleNum > 0) {
-        const pad = (x) => String(x).padStart(2, '0')
-        const deadline = Date.now() + idleNum
-        let tickTimer = 0
-        const updateBtn = () => {
-          if (!backdrop.isConnected) return
-          const secLeft = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
-          if (secLeft <= 0) {
-            btn.textContent = '确定'
-            if (tickTimer) window.clearInterval(tickTimer)
-            tickTimer = 0
-            return
-          }
-          const mm = Math.floor(secLeft / 60)
-          const ss = secLeft % 60
-          btn.textContent = '确定（' + pad(mm) + ':' + pad(ss) + '）'
-        }
-        tickTimer = window.setInterval(updateBtn, 250)
-        updateBtn()
-        btn.onclick = () => {
-          if (tickTimer) window.clearInterval(tickTimer)
-          backdrop.remove()
-        }
-      } else {
-        btn.onclick = () => backdrop.remove()
-      }
-      foot.appendChild(btn)
-      panel.appendChild(head)
-      panel.appendChild(body)
-      panel.appendChild(foot)
-      backdrop.appendChild(panel)
-      document.body.appendChild(backdrop)
-    },
-    { title, variant, lines, rootId: PAGE_MODAL_ROOT_ID, idleCountdownMs },
-  )
-  const modalLocator = page.locator(`#${PAGE_MODAL_ROOT_ID}`)
-  if (suppressIdleBrowserClose) {
-    await modalLocator.waitFor({ state: 'detached', timeout: 0 })
-    return
-  }
-  try {
-    await modalLocator.waitFor({ state: 'detached', timeout: PAGE_MODAL_IDLE_BROWSER_CLOSE_MS })
-  } catch {
-    try {
-      const browser = page.context().browser()
-      if (browser) {
-        const session = await browser.newBrowserCDPSession()
-        try { await session.send('Browser.close') } finally { await session.detach().catch(() => {}) }
-      } else {
-        await page.context().close().catch(() => {})
-      }
-    } catch { /* ignore */ }
-  }
 }
 
 // ============== main ==============
@@ -720,7 +820,6 @@ function buildReportLines(report) {
     `跳过 / 失败：${report.skipped}`,
     `因 DOM 缺元素跳过的 product 数：${report.skippedProducts}`,
     `去重 DB：${report.dbStats.dbPath}（启动时已记录 ${report.dbStats.initialSubmittedLeads} lead / ${report.dbStats.initialSubmittedProducts} product）`,
-    `dryRun：${report.dryRun ? '是（未真实提交）' : '否'}`,
     `shop_id：${report.shopId || '（无）'}`,
     `shop_pk：${report.shopPk || '（无）'}`,
     `ERP 凭证来源：${report.erpSource || '（无）'}`,
@@ -736,18 +835,18 @@ function buildReportLines(report) {
  * @param {{
  *   shopRegion: string, targetUrl: string,
  *   useLaunchApi: boolean, baseUrl: string, cdpUrl: string,
- *   keepOpen: boolean, dryRun: boolean,
+ *   keepOpen: boolean,
  *   topN: number, keywordLimit: number, leadPageSize: number,
  *   navTimeoutMs: number, waitMs: number,
- *   db: DatabaseSync, strictDryRun: boolean,
+ *   db: DatabaseSync,
  *   runId: string, code: string,
  *   regionIndex: number, totalRegions: number,
  *   keepBrowser: boolean,  // true 时不在 finally 中 close（让 run() 在最后统一展示 modal）
  * }} cfg
  */
 async function runForRegion(cfg) {
-  const { shopRegion, targetUrl, useLaunchApi, baseUrl, cdpUrl, keepOpen, dryRun, topN,
-    keywordLimit, leadPageSize, navTimeoutMs, waitMs, db, strictDryRun, runId, code,
+  const { shopRegion, targetUrl, useLaunchApi, baseUrl, cdpUrl, keepOpen, topN,
+    keywordLimit, leadPageSize, navTimeoutMs, waitMs, db, runId, code,
     regionIndex, totalRegions, keepBrowser } = cfg
 
   const regionLabel = totalRegions > 1 ? ` [区域 ${regionIndex + 1}/${totalRegions} · ${shopRegion}]` : ` (${shopRegion})`
@@ -755,6 +854,9 @@ async function runForRegion(cfg) {
 
   const conn = useLaunchApi ? await connectViaLaunchApi(baseUrl, targetUrl) : await connectBrowser(cdpUrl)
   const { browser, page } = conn
+  if (regionIndex === 0) {
+    await openScriptArgsPanel(page, { scriptDir: SCRIPT_DIR })
+  }
   const report = {
     code,
     ok: false,
@@ -764,7 +866,6 @@ async function runForRegion(cfg) {
     totalProductCount: 0,
     allLeads: [],
     limitedLeads: [],
-    dryRun,
     submitSuccess: 0,
     skipped: 0,
     skippedProducts: 0,
@@ -778,10 +879,7 @@ async function runForRegion(cfg) {
 
   try {
     logStep('navigating trending keywords page')
-    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: navTimeoutMs })
-    logStep(`domcontentloaded, current URL: ${page.url()}`)
-    logStep(`waiting ${waitMs}ms for client render`)
-    await sleep(waitMs)
+    await gotoTrendingKeywordsPage(page, targetUrl, { navTimeoutMs, waitMs, regionLabel })
 
     // shop_id（v1 探针确认 5 个来源一致）
     const shopIdInPage = await page.evaluate(() => {
@@ -815,8 +913,7 @@ async function runForRegion(cfg) {
 
     // v0.9: 启动时读 DB，拿到该 shop+region 已成功提报的 lead 集合
     // → 注入 page 上下文，discovered 阶段会跳过这些 lead_name
-    // strictDryRun=true 时把 dryRun 也算"已尝试"（仅用于预演去重效果）
-    const initialSubmittedLeads = getSubmittedLeads(db, { shopId: shopIdInPage, region: shopRegion, strictDryRun })
+    const initialSubmittedLeads = getSubmittedLeads(db, { shopId: shopIdInPage, region: shopRegion })
     report.dbStats.initialSubmittedLeads = initialSubmittedLeads.size
     // 统计 product 维度
     {
@@ -863,15 +960,15 @@ async function runForRegion(cfg) {
     }))
     logStep(`lead/list returned ${report.allLeads.length} leads, total_product_count=${report.totalProductCount}`)
     if (!report.allLeads.length) throw new Error('lead/list 未返回任何 lead')
-    try { await showPageToast(page, `[脚本${regionLabel}] lead/list ${report.allLeads.length} 条 · dryRun=${dryRun ? '是' : '否'} · limit=${keywordLimit}`) } catch { /* ignore */ }
+    try { await showPageToast(page, `[脚本${regionLabel}] lead/list ${report.allLeads.length} 条 · limit=${keywordLimit}`) } catch { /* ignore */ }
 
     // 4) 限制 + 逐个走 ERP search_by_keyword + DOM 提报
     // v0.8 改进：每条 lead 提报前**从当前页面真实可见的 div.core-table-tr 取首条**——而不是按 lead/list API 固定顺序。
     // 这样保证每条 lead 都在新页面可视 13 行内。
     const limitedLeads = []  // 不再 pre-collect，循环里按需取
     report.limitedLeads = limitedLeads
-    logStep(`limit=${keywordLimit}, dryRun=${dryRun}`)
-    await showPageToast(page, `[脚本] 开始自动关键词提报（${limitedLeads.length} 个，dryRun=${dryRun ? '是' : '否'}）`)
+    logStep(`limit=${keywordLimit}`)
+    await showPageToast(page, `[脚本] 开始自动关键词提报（${limitedLeads.length} 个）`)
 
     for (let i = 0; i < keywordLimit; i += 1) {
       // v0.8：从当前页面真实可见的 div.core-table-tr 取首条未提报的 lead
@@ -882,86 +979,15 @@ async function runForRegion(cfg) {
       //   可能拿到 lead/list API 第 N 条（视口内）而非第1 条（视口外）。
       //   因此传入「lead/list API 全量 lead_name 顺序」给前端，前端按这个顺序在 DOM 视口内查询。
       //   v0.9.2 还加上「目标 lead 不在视口时滚一段再 query」的兜底（处理刚好边界的情况）。
-      const submittedLeadsFromDb = await getSubmittedLeads(db, { shopId: shopIdInPage, region: shopRegion, strictDryRun })
-      try {
-        await page.evaluate((leads) => { window.__SUBMITTED_LEADS__ = leads; }, [...submittedLeadsFromDb])
-      } catch { /* ignore */ }
+      const submittedLeadsFromDb = await getSubmittedLeads(db, { shopId: shopIdInPage, region: shopRegion })
       const apiLeadNameOrder = report.allLeads.map((l) => l.lead_name).filter(Boolean)
-      try {
-        await page.evaluate((names) => { window.__API_LEAD_ORDER__ = names; }, apiLeadNameOrder)
-      } catch { /* ignore */ }
-
-      const discovered = await page.evaluate(async () => {
-        const compact = (s) => String(s || '').replace(/\s+/g, ' ').trim()
-        const submittedLeads = new Set(Array.isArray(window.__SUBMITTED_LEADS__) ? window.__SUBMITTED_LEADS__ : [])
-        const apiOrder = Array.isArray(window.__API_LEAD_ORDER__) ? window.__API_LEAD_ORDER__ : []
-
-        // DOM 视口内可见的 lead_name -> 元素 映射
-        const readVisibleLeads = () => {
-          const rows = Array.from(document.querySelectorAll('div.core-table-tr')).filter((el) => {
-            const r = el.getBoundingClientRect()
-            const st = window.getComputedStyle(el)
-            return r.width > 0 && r.height > 0 && st.visibility !== 'hidden' && st.display !== 'none'
-          })
-          const map = new Map()  // leadName -> { row, text }
-          for (const tr of rows) {
-            const text = compact(tr.textContent)
-            if (text.includes('已提报') || text.includes('审核中') || text.includes('已批准') || text.includes('已驳回')) continue
-            const m = text.match(/^#\s*([^\n]+?)(?=Womenswear|Menswear|全球|$)/)
-            if (!m) continue
-            const name = m[1].trim()
-            if (submittedLeads.has(name)) continue
-            if (!map.has(name)) map.set(name, { row: tr, text })
-          }
-          return map
-        }
-
-        // 滚动一次以触发虚拟滚动（rc-virtual-list 用 IntersectionObserver，需要滚动事件）
-        const nudgeScroll = () => {
-          const sc = document.scrollingElement || document.documentElement
-          // 滚 1 个视口高度的一半，再立刻回滚 0（不改变最终位置，只触发 IO）
-          const delta = Math.round(window.innerHeight * 0.6)
-          sc.scrollTop = sc.scrollTop + delta
-          // 立刻 requestAnimationFrame 触发 layout + IO 回调
-          return new Promise((resolve) => requestAnimationFrame(() => {
-            sc.scrollTop = sc.scrollTop - delta
-            requestAnimationFrame(() => resolve())
-          }))
-        }
-
-        // 1) 第一轮：当前视口内找
-        let visible = readVisibleLeads()
-        // 2) 第二轮：滚一下再找（处理边界：目标 lead 刚出视口）
-        if (!apiOrder.some((n) => visible.has(n))) {
-          await nudgeScroll()
-          await new Promise((r) => setTimeout(r, 300))
-          visible = readVisibleLeads()
-        }
-
-        // 按 API 顺序，返回 DOM 视口内可见、且不在已提报集合的 lead 列表（最多 30）
-        const out = []
-        for (const name of apiOrder) {
-          if (visible.has(name)) {
-            out.push(name)
-            if (out.length >= 30) break
-          }
-        }
-        // 如果 API 顺序里都没有，但 DOM 视口内有其它 lead（不在 API 列表）—— 退化为"DOM 视口首条"兜底
-        if (out.length === 0) {
-          for (const [name] of visible) {
-            out.push(name)
-            if (out.length >= 30) break
-          }
-        }
-        return out
-      })
-      const leadName = discovered[0] || ''
+      const leadName = await discoverNextLeadName(page, { submittedLeadsFromDb, apiLeadNameOrder })
       if (!leadName) {
         logStep(`  (${i + 1}/${keywordLimit}) 页面找不到任何 lead 行（页面+DB 过滤后），结束`)
         break
       }
       // v0.9: 取出该 lead 已成功提报的 product 集合 → ERP 结果里直接过滤（不再点侧栏搜索）
-      const priorSubmittedProductIds = getSubmittedProductIds(db, { leadName, shopId: shopIdInPage, region: shopRegion, strictDryRun })
+      const priorSubmittedProductIds = getSubmittedProductIds(db, { leadName, shopId: shopIdInPage, region: shopRegion })
       try {
         await page.evaluate((arr) => { window.__SUBMITTED_PRODUCT_IDS__ = arr; }, [...priorSubmittedProductIds])
       } catch { /* ignore */ }
@@ -980,18 +1006,6 @@ async function runForRegion(cfg) {
           row.status = 'empty'
           report.skipped += 1
           logStep(`  → ERP 返回空商品，跳过 lead_name="${lead.lead_name}"`)
-          continue
-        }
-        if (dryRun) {
-          for (let j = 0; j < items.length; j += 1) {
-            const it = items[j]
-            const productId = it?.product_id
-            if (!productId) continue
-            logStep(`  [dryRun] would DOM-submit lead=${lead.lead_id} product=${productId} title="${String(it.title || '').slice(0, 40)}"`)
-            row.success += 1
-            report.submitSuccess += 1
-          }
-          row.status = 'dryRun-logged'
           continue
         }
         // 真实 DOM 提报：v17 探针验证的三步流程。
@@ -1026,19 +1040,6 @@ async function runForRegion(cfg) {
           const productId = productIds[p]
           const item = items.find((it) => String(it?.product_id) === productId)
           const title = String(item?.title || item?.description_preview || '').trim()
-          if (dryRun) {
-            logStep(`  [dryRun] would DOM-submit lead=${lead.lead_id} product=${productId} title="${title.slice(0, 40)}"`)
-            submittedCount += 1
-            submittedProductIds.push(productId)
-            report.submitSuccess += 1
-            // v0.9: dry-run 也写库（status=dryRun），便于回放
-            recordSubmission(db, {
-              leadName: lead.lead_name, leadId: lead.lead_id,
-              productId, shopId: shopIdInPage, region: shopRegion,
-              status: 'dryRun', title, runId,
-            })
-            continue
-          }
           try {
             const step1 = await domStep1SingleProduct(page, lead.lead_name, productId)
             if (step1?.skipped) {
@@ -1114,11 +1115,10 @@ async function runForRegion(cfg) {
         try { await showPageToast(page, `[脚本${regionLabel}] lead ${i + 1}/${keywordLimit} "${lead.lead_name}" 完成 · 成功 ${submittedCount} 跳过 ${skippedProductIds.length}`) } catch { /* ignore */ }
         // 真实提报后：goto 重新加载 trending_keywords，让 discovered[0] 在新一轮指向"新的首条"
         // 不重新加载时，TikTok React 状态不会切，已提报 lead 仍可能出现在 DOM 里
-        if (!dryRun && i + 1 < keywordLimit) {
+        if (i + 1 < keywordLimit) {
           logStep(`  → 重新加载 trending_keywords 让 discovered[0] 切到下一条 (${i + 2}/${keywordLimit})`)
           try {
-            await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: navTimeoutMs })
-            await sleep(waitMs)
+            await gotoTrendingKeywordsPage(page, targetUrl, { navTimeoutMs, waitMs, regionLabel })
           } catch (e) {
             logStep(`  → 重新加载失败: ${e instanceof Error ? e.message : String(e)}`)
           }
@@ -1133,12 +1133,11 @@ async function runForRegion(cfg) {
         report.rows.push(row)
       } finally {
         // 真实提报后：页面可能被导航 / 虚拟滚动状态被破坏。强制重新加载 trending_keywords
-        //  让下一条 lead 在新页面里能找到行。dryRun 不需要（不真实提报）
-        if (!dryRun && i + 1 < limitedLeads.length) {
+        // 让下一条 lead 在新页面里能找到行。
+        if (i + 1 < limitedLeads.length) {
           logStep(`  → 重新加载 trending_keywords 准备下一条 lead (${i + 2}/${limitedLeads.length})`)
           try {
-            await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: navTimeoutMs })
-            await sleep(waitMs)
+            await gotoTrendingKeywordsPage(page, targetUrl, { navTimeoutMs, waitMs, regionLabel })
           } catch (e) {
             logStep(`  → 重新加载失败: ${e instanceof Error ? e.message : String(e)}`)
           }
@@ -1170,7 +1169,6 @@ async function run() {
   const baseUrl = getArgValue('--baseUrl') || DEFAULT_LAUNCH_BASE_URL
   const cdpUrl = getArgValue('--cdp') || process.env.PLAYWRIGHT_CDP_URL || process.env.CDP_URL || ''
   const keepOpen = hasFlag('--keepOpen')
-  const dryRun = hasFlag('--dryRun')
   const topN = getNumberArg('--topN', DEFAULT_TOP_N)
   const keywordLimit = getNumberArg('--limit', DEFAULT_KEYWORD_LIMIT)
   const leadPageSize = getNumberArg('--leadPageSize', DEFAULT_LEAD_PAGE_SIZE)
@@ -1181,11 +1179,10 @@ async function run() {
 
   // v0.9: SQLite 持久化（防重复提报）—— DB 在所有 region 间共享
   const resetDb = hasFlag('--reset-db')
-  const strictDryRun = hasFlag('--strict-dryrun')
   const dbPath = getArgValue('--db') || path.join(path.dirname(fileURLToPath(import.meta.url)), '.data', 'submissions.sqlite')
   const runId = `${getArgValue('--code') || 'GMNQ5O'}-${new Date().toISOString().replace(/[:.]/g, '-')}`
   const db = openSubmissionsDb({ dbPath, reset: resetDb })
-  logStep(`submissions DB: ${dbPath} (reset=${resetDb}, strictDryRun=${strictDryRun})`)
+  logStep(`submissions DB: ${dbPath} (reset=${resetDb})`)
   logStep(`shop_regions=${JSON.stringify(shopRegions)} (${shopRegions.length} 个区域依次独立跑)`)
 
   const code = getArgValue('--code') || 'GMNQ5O'
@@ -1201,10 +1198,10 @@ async function run() {
     const cfg = {
       shopRegion, targetUrl,
       useLaunchApi, baseUrl, cdpUrl,
-      keepOpen, dryRun,
+      keepOpen,
       topN, keywordLimit, leadPageSize,
       navTimeoutMs, waitMs,
-      db, strictDryRun, runId, code,
+      db, runId, code,
       regionIndex: ri, totalRegions: shopRegions.length,
       // 仅最后一个 region 保留 browser；其它 region 提报后立即 close
       keepBrowser: isLast,
@@ -1221,7 +1218,7 @@ async function run() {
       const msg = e instanceof Error ? e.message : String(e)
       logStep(`region=${shopRegion} 未捕获异常: ${msg}`)
       report = {
-        code, shopRegion, ok: false, dryRun,
+        code, shopRegion, ok: false,
         submitSuccess: 0, skipped: 0, skippedProducts: 0,
         errors: [msg], rows: [], allLeads: [], limitedLeads: [],
         shopId: '', shopPk: null, totalProductCount: 0, erpSource: '',
@@ -1284,7 +1281,7 @@ async function run() {
           `${r.shopRegion}: ${r.ok ? '✅' : '⚠️'} success=${r.submitSuccess} skipped=${r.skipped} skippedProducts=${r.skippedProducts} errors=${r.errors.length}`,
         ]),
       ]
-  const variant = anyErr ? (dryRun ? 'warning' : 'danger') : 'success'
+  const variant = anyErr ? 'danger' : 'success'
   const title = anyOk
     ? (shopRegions.length > 1 ? `任务已完成（${shopRegions.length} 个区域）` : '任务已完成')
     : '任务已结束（部分失败）'
@@ -1294,7 +1291,7 @@ async function run() {
   if (lastPage) {
     try {
       await showPageResultModalUntilAck(lastPage, {
-        title, variant, suppressIdleBrowserClose: keepOpen, lines,
+        title, variant, lines,
       })
     } catch (e) {
       logStep(`弹汇总 modal 失败: ${e instanceof Error ? e.message : String(e)}`)

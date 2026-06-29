@@ -5,9 +5,73 @@
   "entry": "tiktok_ranking_1688_image_collect.mjs",
   "order": 45,
   "tags": ["playwright", "1688", "opportunity", "warehouse"],
-  "version": "1.0.0",
+  "version": "1.3.0",
   "defaultArgs": ["--useLaunchApi", "--code", "ICHPPH"],
-  "argsHint": "在系统设置「链氪 ERP」配置 Host/Key 后，可用 --useLaunchApi 或 --cdp 从 Launch 拉取；亦可 ERP_API_KEY 或 --erpKey。--detailWaitMs 详情页抓取前等待（默认 3000ms）。--dryRun 不 POST 采集/标记。详见 mcp 文档。",
+  "argsHint": "可在启动参数面板图形化配置；ERP 凭证优先从系统设置读取。详见 mcp 文档。",
   "requiresLaunchServer": true,
-  "mcpDoc": "mcp_tiktok_ranking_1688_image_collect.md"
+  "mcpDoc": "mcp_tiktok_ranking_1688_image_collect.md",
+  "argForm": [
+    {
+      "type": "info",
+      "text": "本脚本会真实向链氪 ERP POST 仓库采集，并批量标记榜单商品「已开发」。需已配置 ERP 且浏览器能访问 1688。"
+    },
+    {
+      "id": "use_launch",
+      "flag": "--useLaunchApi",
+      "type": "boolean",
+      "asFlag": true,
+      "label": "通过 NexBrowser 自动连接浏览器",
+      "description": "推荐开启：Launch 已登录 1688 的实例。ERP Key 可从 Launch 集成接口读取。",
+      "default": true
+    },
+    {
+      "id": "code",
+      "flag": "--code",
+      "type": "text",
+      "label": "环境码",
+      "description": "能访问 1688 图搜且已登录的 NexBrowser 实例 code。",
+      "placeholder": "例如 ICHPPH",
+      "default": "ICHPPH",
+      "required": true,
+      "showWhen": { "use_launch": true }
+    },
+    {
+      "id": "cdp",
+      "flag": "--cdp",
+      "type": "text",
+      "label": "CDP 调试地址",
+      "description": "直连已打开浏览器时使用。",
+      "placeholder": "http://127.0.0.1:19876",
+      "showWhen": { "use_launch": false }
+    },
+    {
+      "id": "pageSize",
+      "flag": "--pageSize",
+      "type": "number",
+      "label": "榜单 API 每页条数",
+      "description": "从 ERP 拉取待开发榜单时请求的 pageSize，默认 20。",
+      "default": 20,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "id": "pick",
+      "flag": "--pick",
+      "type": "number",
+      "label": "随机采集条数",
+      "description": "从当前页有封面图的商品中随机选几条做 1688 图搜采集，默认 3。",
+      "default": 3,
+      "min": 1,
+      "max": 100
+    },
+    {
+      "id": "skipMark",
+      "flag": "--skipMark",
+      "type": "boolean",
+      "asFlag": true,
+      "label": "跳过「标记已开发」",
+      "description": "勾选后只采集不进仓库标记步骤（调试用）。",
+      "default": false
+    }
+  ]
 }

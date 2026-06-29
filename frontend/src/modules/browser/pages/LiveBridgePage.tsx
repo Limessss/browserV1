@@ -1,346 +1,338 @@
 /**
- * 实时浏览器桥（Live Bridge）页面
+ * AI 浏览器接管 — Agent 配置页
  *
- * 直接连 ws://127.0.0.1:<launchPort>/api/live-bridge，
- * 实时操作浏览器：profile / navigate / screenshot / read_dom / click / type / evaluate。
- *
- * 协议：JSON over WebSocket
- *  C2S: { id, cmd, args }
- *  S2C: { id, ok, result? | error? }
- *  推送: { type: "event", event, data }
+ * 面向「交给 AI Agent 使用」：展示服务状态、前置准备与 MCP/Skill 接入方式。
+ * 不在此页做手动发命令 / 截图 / DOM 调试（由 Codex、Claude Code、Openclaw 等 Agent 通过 MCP 或 CLI 完成）。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import {
-  Camera,
-  CircleDot,
-  Code2,
-  FileSearch,
-  Globe,
-  Loader2,
-  MousePointerClick,
-  Power,
-  Type as TypeIcon,
+  Activity,
+  Bot,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  ExternalLink,
+  FolderOpen,
+  Monitor,
+  RefreshCw,
+  XCircle,
 } from 'lucide-react'
-import { Button, Card, Input, toast } from '../../../shared/components'
-import { fetchLaunchServerInfo } from '../api'
+import { Button, Card, toast } from '../../../shared/components'
+import {
+  fetchLaunchServerInfo,
+  fetchLiveBridgeSkillDir,
+  openLiveBridgeSkillDir,
+  type LaunchServerInfo,
+} from '../api'
 
-interface LiveResp {
-  id: string
-  ok: boolean
-  result?: unknown
-  error?: string
-}
-interface LiveEvent {
-  type: 'event'
-  event: string
-  data: unknown
-}
-interface LogEntry {
-  id: string
-  kind: 'req' | 'resp' | 'event' | 'err'
-  text: string
-  ts: number
+function StatusDot({ ok }: { ok: boolean }) {
+  return (
+    <span
+      className="inline-block w-2 h-2 rounded-full shrink-0"
+      style={{ background: ok ? 'var(--color-success)' : 'var(--color-text-muted)' }}
+    />
+  )
 }
 
-const PRESET_CMDS: Array<{ label: string; cmd: string; args: object; icon: any }> = [
-  { label: '截图', cmd: 'screenshot', args: { fullPage: false }, icon: Camera },
-  { label: '读取 DOM', cmd: 'read_dom', args: { maxChars: 30000 }, icon: FileSearch },
-  { label: '当前 URL', cmd: 'url', args: {}, icon: Globe },
-  { label: '刷新', cmd: 'reload', args: {}, icon: Power },
-]
+function InlineCode({ children }: { children: ReactNode }) {
+  return (
+    <code className="px-1 py-0.5 rounded text-[var(--color-text-primary)] bg-[var(--color-bg-muted)] font-mono text-[0.9em]">
+      {children}
+    </code>
+  )
+}
+
+function buildMcpConfig(skillDir: string): string {
+  const script = `${skillDir.replace(/\\/g, '/')}/scripts/mcp-live-bridge.mjs`
+  return JSON.stringify(
+    {
+      mcpServers: {
+        nexbrowser: {
+          command: 'node',
+          args: [script],
+        },
+      },
+    },
+    null,
+    2,
+  )
+}
 
 export function LiveBridgePage() {
-  const [baseUrl, setBaseUrl] = useState('http://127.0.0.1:19876')
-  const [wsUrl, setWsUrl] = useState('')
-  const [apiKey, setApiKey] = useState('')
-  const [connected, setConnected] = useState(false)
-  const [profileCode, setProfileCode] = useState('BUPM2Z')
-  const [activeCode, setActiveCode] = useState('')
-  const [pageUrl, setPageUrl] = useState('')
-  const [screenshotBase64, setScreenshotBase64] = useState('')
-  const [domText, setDomText] = useState('')
-  const [logs, setLogs] = useState<LogEntry[]>([])
-  const [jsonInput, setJsonInput] = useState('{\n  "cmd": "url"\n}')
-  const [running, setRunning] = useState(false)
-  const wsRef = useRef<WebSocket | null>(null)
-  const reqSeqRef = useRef(1)
-  const pendingResolvers = useRef<Map<string, (r: LiveResp) => void>>(new Map())
-  const logEndRef = useRef<HTMLDivElement | null>(null)
+  const [info, setInfo] = useState<LaunchServerInfo | null>(null)
+  const [skillDir, setSkillDir] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
-  useEffect(() => {
-    void fetchLaunchServerInfo().then((info) => {
-      setBaseUrl(info.baseUrl)
-      const port = info.port || 19876
-      setWsUrl(`ws://127.0.0.1:${port}/api/live-bridge`)
-      if (info.apiAuth?.configured && info.apiAuth.header) {
-        // 仅在用户启用了鉴权时才需要
-      }
-    }).catch(() => undefined)
+  const refresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      const [launchInfo, dir] = await Promise.all([
+        fetchLaunchServerInfo(),
+        fetchLiveBridgeSkillDir(),
+      ])
+      setInfo(launchInfo)
+      if (dir) setSkillDir(dir)
+    } catch {
+      toast.error('无法读取服务状态')
+    } finally {
+      setRefreshing(false)
+    }
   }, [])
 
   useEffect(() => {
-    if (logEndRef.current) logEndRef.current.scrollTop = logEndRef.current.scrollHeight
-  }, [logs])
+    void refresh()
+    const t = setInterval(() => { void refresh() }, 8000)
+    return () => clearInterval(t)
+  }, [refresh])
 
-  const appendLog = useCallback((entry: Omit<LogEntry, 'id' | 'ts'>) => {
-    setLogs((prev) => {
-      const next = [...prev, { ...entry, id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, ts: Date.now() }]
-      return next.length > 500 ? next.slice(-500) : next
-    })
+  const wsUrl = useMemo(() => {
+    const port = info?.port || 19876
+    return `ws://127.0.0.1:${port}/api/live-bridge`
+  }, [info?.port])
+
+  const mcpConfig = useMemo(
+    () => (skillDir ? buildMcpConfig(skillDir) : ''),
+    [skillDir],
+  )
+
+  const launchReady = Boolean(info?.ready)
+  const browserRunning = Boolean(info?.activeDebugPort && info.activeDebugPort > 0)
+
+  const copyText = useCallback(async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success(`已复制${label}`)
+    } catch {
+      toast.error('复制失败')
+    }
   }, [])
 
-  const connect = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      toast.info('已连接')
-      return
-    }
-    const url = apiKey ? `${wsUrl}?apikey=${encodeURIComponent(apiKey)}` : wsUrl
-    appendLog({ kind: 'event', text: `[connecting] ${url}` })
-    const ws = new WebSocket(url)
-    wsRef.current = ws
-    ws.onopen = () => {
-      setConnected(true)
-      appendLog({ kind: 'event', text: `[open] ws 已连接` })
-    }
-    ws.onclose = (ev) => {
-      setConnected(false)
-      appendLog({ kind: 'event', text: `[close] code=${ev.code} reason=${ev.reason || ''}` })
-      wsRef.current = null
-    }
-    ws.onerror = () => {
-      appendLog({ kind: 'err', text: `[error] WebSocket 错误` })
-    }
-    ws.onmessage = (ev) => {
-      let msg: any
-      try { msg = JSON.parse(String(ev.data)) } catch { return }
-      if (msg?.type === 'event') {
-        const ev = msg as LiveEvent
-        appendLog({ kind: 'event', text: `[event:${ev.event}] ${JSON.stringify(ev.data).slice(0, 300)}` })
-        if (ev.event === 'hello') {
-          // ready
-        }
-        return
+  const openSkillDir = useCallback(async () => {
+    try {
+      const path = await openLiveBridgeSkillDir()
+      if (path) {
+        setSkillDir(path)
+        toast.success('已打开 Skill 目录')
+      } else {
+        toast.error('无法打开 Skill 目录')
       }
-      const resp = msg as LiveResp
-      const resolver = pendingResolvers.current.get(resp.id)
-      pendingResolvers.current.delete(resp.id)
-      if (resolver) resolver(resp)
-      appendLog({
-        kind: resp.ok ? 'resp' : 'err',
-        text: `[resp id=${resp.id}] ${resp.ok ? 'OK' : `ERR: ${resp.error}`} ${resp.result ? JSON.stringify(resp.result).slice(0, 200) : ''}`,
-      })
-      if (resp.ok && resp.result) {
-        const r: any = resp.result
-        if (r.imageBase64) setScreenshotBase64(r.imageBase64)
-        if (r.text !== undefined && typeof r.text === 'string') setDomText(r.text)
-        if (typeof r.url === 'string') setPageUrl(r.url)
-        if (typeof r.code === 'string') setActiveCode(r.code)
-      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
     }
-  }, [wsUrl, apiKey, appendLog])
-
-  const disconnect = useCallback(() => {
-    if (wsRef.current) {
-      try { wsRef.current.close(1000, 'user-disconnect') } catch { /* ignore */ }
-      wsRef.current = null
-    }
-    setConnected(false)
   }, [])
 
-  const sendCmd = useCallback(async (cmd: string, args: Record<string, unknown>): Promise<LiveResp | null> => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      toast.error('WebSocket 未连接')
-      return null
-    }
-    const id = `r${reqSeqRef.current++}`
-    const payload = { id, cmd, args }
-    appendLog({ kind: 'req', text: `[req ${id}] ${JSON.stringify(payload).slice(0, 300)}` })
-    wsRef.current.send(JSON.stringify(payload))
-    return await new Promise<LiveResp>((resolve) => {
-      const t = setTimeout(() => {
-        pendingResolvers.current.delete(id)
-        resolve({ id, ok: false, error: 'timeout (10s)' })
-      }, 10_000)
-      pendingResolvers.current.set(id, (r) => {
-        clearTimeout(t)
-        resolve(r)
-      })
-    })
-  }, [appendLog])
-
-  const runCustom = useCallback(async () => {
-    let parsed: any
-    try { parsed = JSON.parse(jsonInput) } catch (e) {
-      toast.error(`JSON 解析失败: ${e instanceof Error ? e.message : String(e)}`)
-      return
-    }
-    if (!parsed?.cmd) { toast.error('JSON 缺少 cmd 字段'); return }
-    setRunning(true)
-    try {
-      await sendCmd(String(parsed.cmd), (parsed.args ?? {}) as Record<string, unknown>)
-    } finally { setRunning(false) }
-  }, [jsonInput, sendCmd])
-
-  const connectProfile = useCallback(async () => {
-    setRunning(true)
-    try {
-      const r = await sendCmd('profile', { code: profileCode })
-      if (r?.ok) {
-        // url + title 已在 onmessage 里 setPageUrl/setActiveCode
-        await sendCmd('screenshot', { fullPage: false })
-      }
-    } finally { setRunning(false) }
-  }, [profileCode, sendCmd])
-
-  const runPreset = useCallback(async (cmd: string, args: object) => {
-    setRunning(true)
-    try { await sendCmd(cmd, args as Record<string, unknown>) } finally { setRunning(false) }
-  }, [sendCmd])
-
-  const headerStatus = useMemo(() => {
-    if (!connected) return { color: 'bg-red-500', text: '未连接' }
-    if (activeCode) return { color: 'bg-green-500', text: `已连接 · ${activeCode}` }
-    return { color: 'bg-yellow-500', text: '已连接 · 未选 profile' }
-  }, [connected, activeCode])
+  const steps = [
+    {
+      n: 1,
+      title: '保持 NexBrowser 运行',
+      desc: '只需 NexBrowser 主程序在跑（Launch 服务 :19876 就绪）。无需手动去实例列表 Launch——Agent 可通过 browser_connect({ code: "BUPM2Z" }) 或 browser_profile 自动打开指定 profile。',
+      action: (
+        <Link to="/browser/list">
+          <Button variant="secondary" size="sm">
+            <Monitor className="w-3.5 h-3.5 mr-1" />
+            实例列表（可选）
+          </Button>
+        </Link>
+      ),
+      done: launchReady,
+    },
+    {
+      n: 2,
+      title: '注册 MCP Server（推荐）',
+      desc: '将下方配置注册到 Codex、Claude Code、Openclaw、Cursor 等支持 MCP 的 Agent，重启对应 Agent 后即可使用 browser_* 工具。Cursor 可粘贴到 .cursor/mcp.json。',
+      action: mcpConfig ? (
+        <Button variant="primary" size="sm" onClick={() => void copyText(mcpConfig, ' MCP 配置')}>
+          <Copy className="w-3.5 h-3.5 mr-1" />
+          复制 MCP 配置
+        </Button>
+      ) : null,
+      done: Boolean(mcpConfig),
+    },
+    {
+      n: 3,
+      title: '在 Agent 中下达任务',
+      desc: '示例：「用 BUPM2Z 打开浏览器，去订单管理查即将逾期订单」。Agent 会 browser_connect({ code }) → snapshot → 操作。登录态过期时需你手动登录一次，Agent 不会代填密码。',
+      action: null,
+      done: launchReady && Boolean(mcpConfig),
+    },
+  ]
 
   return (
-    <div className="flex flex-col h-full">
-      {/* 顶部状态栏 */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900/60">
-        <div className="flex items-center gap-3">
-          <span className={`inline-block w-2.5 h-2.5 rounded-full ${headerStatus.color}`} />
-          <span className="text-sm font-medium text-slate-100">{headerStatus.text}</span>
-          {pageUrl && <span className="text-xs text-slate-400 max-w-[420px] truncate">{pageUrl}</span>}
+    <div className="h-full overflow-y-auto bg-[var(--color-bg-base)]">
+      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+        {/* 标题 */}
+        <div>
+          <div className="flex items-center gap-2">
+            <Bot className="w-6 h-6 text-[var(--color-accent)]" />
+            <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">AI 浏览器接管</h1>
+          </div>
+          <p className="mt-2 text-sm text-[var(--color-text-secondary)] leading-relaxed">
+            让 Codex、Claude Code、Openclaw、Cursor 等 AI Agent 通过 MCP 实时控制本机指纹浏览器。
+            本页仅用于查看服务状态与完成 Agent 接入配置，日常操作交给 Agent 即可。
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Input
-            value={wsUrl}
-            onChange={(e) => setWsUrl(e.target.value)}
-            placeholder="ws://127.0.0.1:19876/api/live-bridge"
-            className="w-[360px] font-mono text-xs"
-          />
-          <Input
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="(鉴权头，可选)"
-            type="password"
-            className="w-[180px] font-mono text-xs"
-          />
-          {connected ? (
-            <Button variant="secondary" onClick={disconnect}>断开</Button>
-          ) : (
-            <Button variant="primary" onClick={connect}>连接</Button>
-          )}
-        </div>
-      </div>
 
-      {/* 中部：3 列 */}
-      <div className="flex-1 grid grid-cols-12 gap-3 p-4 overflow-hidden">
-        {/* 左：profile + 预设命令 */}
-        <div className="col-span-3 flex flex-col gap-3 overflow-y-auto">
-          <Card title="Profile">
-            <div className="space-y-2">
-              <Input
-                value={profileCode}
-                onChange={(e) => setProfileCode(e.target.value)}
-                placeholder="环境码（如 BUPM2Z）"
-                className="font-mono"
-              />
-              <Button variant="primary" onClick={connectProfile} disabled={!connected || running}>
-                {running ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Power className="w-4 h-4 mr-1" />}
-                连接 profile
+        {/* 服务状态 */}
+        <Card title="服务状态">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm">
+                <StatusDot ok={launchReady} />
+                <span className="font-medium text-[var(--color-text-primary)]">Launch 服务</span>
+                <span className="text-[var(--color-text-secondary)]">{launchReady ? '运行中' : '未就绪'}</span>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => void refresh()} disabled={refreshing}>
+                <RefreshCw className={`w-3.5 h-3.5 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+                刷新
               </Button>
             </div>
-          </Card>
+            <div className="flex items-center gap-2 text-sm min-w-0">
+              <StatusDot ok={launchReady} />
+              <span className="font-medium text-[var(--color-text-primary)] shrink-0">Live Bridge</span>
+              <code className="text-xs text-[var(--color-text-secondary)] font-mono truncate flex-1 bg-[var(--color-bg-muted)] px-2 py-1 rounded">
+                {wsUrl}
+              </code>
+              <Button variant="ghost" size="sm" onClick={() => void copyText(wsUrl, ' WS 地址')}>
+                <Copy className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <StatusDot ok={browserRunning} />
+              <span className="font-medium text-[var(--color-text-primary)]">浏览器实例</span>
+              <span
+                className="font-medium"
+                style={{ color: browserRunning ? 'var(--color-success)' : 'var(--color-text-secondary)' }}
+              >
+                {browserRunning
+                  ? `已有 Launch 实例（CDP :${info?.activeDebugPort}，最近 active）`
+                  : '当前无 active 实例 — Agent 可通过 browser_connect({ code }) 自动 Launch'}
+              </span>
+            </div>
+          </div>
+        </Card>
 
-          <Card title="预设命令">
-            <div className="grid grid-cols-2 gap-2">
-              {PRESET_CMDS.map((p) => (
-                <Button
-                  key={p.label}
-                  variant="secondary"
-                  onClick={() => runPreset(p.cmd, p.args)}
-                  disabled={!connected || running}
+        {/* 三步接入 */}
+        <Card title="接入步骤">
+          <div className="space-y-5">
+            {steps.map((s) => (
+              <div key={s.n} className="flex gap-4">
+                <div
+                  className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold"
+                  style={
+                    s.done
+                      ? { background: 'var(--color-accent-muted)', color: 'var(--color-success)' }
+                      : { background: 'var(--color-bg-muted)', color: 'var(--color-text-secondary)' }
+                  }
                 >
-                  <p.icon className="w-4 h-4 mr-1" />
-                  {p.label}
-                </Button>
-              ))}
-              <Button variant="secondary" onClick={() => runPreset('back', {})} disabled={!connected || running}>
-                <CircleDot className="w-4 h-4 mr-1" />
-                后退
-              </Button>
-              <Button variant="secondary" onClick={() => runPreset('forward', {})} disabled={!connected || running}>
-                <CircleDot className="w-4 h-4 mr-1" />
-                前进
-              </Button>
-            </div>
-          </Card>
+                  {s.done ? <CheckCircle2 className="w-4 h-4" /> : s.n}
+                </div>
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="text-sm font-medium text-[var(--color-text-primary)]">{s.title}</div>
+                  <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">{s.desc}</p>
+                  {s.action && <div className="pt-1">{s.action}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
 
-          <Card title="自定义 JSON">
-            <textarea
-              value={jsonInput}
-              onChange={(e) => setJsonInput(e.target.value)}
-              spellCheck={false}
-              className="w-full h-40 px-2 py-1 text-xs font-mono rounded border border-slate-700 bg-slate-950 text-slate-100 resize-none"
-            />
-            <div className="flex gap-2 mt-2">
-              <Button variant="primary" onClick={runCustom} disabled={!connected || running}>
-                <Code2 className="w-4 h-4 mr-1" /> 发送
-              </Button>
-              <Button variant="ghost" onClick={() => setLogs([])}>清日志</Button>
-            </div>
-            <div className="text-xs text-slate-500 mt-2 leading-relaxed">
-              例：<code className="text-slate-300">{`{"cmd":"click","args":{"selector":"text=下一步"}}`}</code>
-              <br />
-              <code className="text-slate-300">{`{"cmd":"evaluate","args":{"expression":"location.href"}}`}</code>
-            </div>
-          </Card>
-        </div>
-
-        {/* 中：截图 */}
-        <div className="col-span-5 flex flex-col">
-          <Card title="截图（最近一次 screenshot 响应）" className="flex-1 flex flex-col">
-            <div className="flex-1 bg-slate-950 border border-slate-800 rounded overflow-auto flex items-start justify-center">
-              {screenshotBase64 ? (
-                <img
-                  src={`data:image/png;base64,${screenshotBase64}`}
-                  className="max-w-full"
-                  alt="screenshot"
-                />
-              ) : (
-                <div className="text-slate-500 text-sm py-12">尚未截图。点击"截图"或先"连接 profile"。</div>
-              )}
-            </div>
-          </Card>
-        </div>
-
-        {/* 右：DOM 文本 + 实时日志 */}
-        <div className="col-span-4 flex flex-col gap-3 overflow-hidden">
-          <Card title="DOM 文本（最近 read_dom）" className="h-1/3 flex flex-col">
-            <pre className="flex-1 overflow-auto whitespace-pre-wrap break-words text-xs font-mono text-slate-200 bg-slate-950 border border-slate-800 rounded p-2">
-              {domText || '（空）'}
+        {/* MCP 配置 */}
+        <Card title="通用 MCP 配置">
+          <p className="text-sm text-[var(--color-text-secondary)] mb-3 leading-relaxed">
+            复制到 Codex、Claude Code、Openclaw、Cursor 等 Agent 的 MCP 配置中。Cursor 示例路径：
+            {' '}<InlineCode>.cursor/mcp.json</InlineCode>（无则新建），保存后重启对应 Agent。
+          </p>
+          {mcpConfig ? (
+            <pre className="text-xs font-mono text-[var(--color-text-primary)] bg-[var(--color-bg-muted)] border border-[var(--color-border-default)] rounded-lg p-3 overflow-x-auto leading-relaxed">
+              {mcpConfig}
             </pre>
-          </Card>
+          ) : (
+            <p className="text-sm text-[var(--color-text-muted)]">正在读取 Skill 目录…</p>
+          )}
+          <div className="flex flex-wrap gap-2 mt-3">
+            <Button variant="primary" disabled={!mcpConfig} onClick={() => void copyText(mcpConfig, ' MCP 配置')}>
+              <Copy className="w-4 h-4 mr-1" />
+              复制 MCP 配置
+            </Button>
+            <Button variant="secondary" onClick={() => void openSkillDir()}>
+              <FolderOpen className="w-4 h-4 mr-1" />
+              打开 Skill 目录
+            </Button>
+          </div>
+          <p className="text-sm text-[var(--color-text-muted)] mt-3 leading-relaxed">
+            首选 <InlineCode>browser_connect</InlineCode>（带 code 自动 Launch）。
+            另提供 <InlineCode>browser_attach</InlineCode>、
+            <InlineCode>browser_snapshot</InlineCode>、
+            <InlineCode>browser_click</InlineCode> 等 16 个工具。
+            也可将整个 Skill 目录导入 Agent 的规则/Skill 系统（见目录内 SKILL.md）。
+          </p>
+        </Card>
 
-          <Card title="实时日志（最近 500 条）" className="flex-1 flex flex-col">
-            <div ref={logEndRef} className="flex-1 overflow-auto bg-slate-950 border border-slate-800 rounded p-2 text-xs font-mono space-y-1">
-              {logs.length === 0 && <div className="text-slate-500">连接后这里会滚动显示请求/响应/事件。</div>}
-              {logs.map((l) => {
-                const color =
-                  l.kind === 'req' ? 'text-blue-300' :
-                  l.kind === 'resp' ? (l.text.includes('ERR') ? 'text-red-300' : 'text-green-300') :
-                  l.kind === 'err' ? 'text-red-400' : 'text-slate-300'
-                return <div key={l.id} className={color}>{l.text}</div>
-              })}
+        {/* Agent 工作流提示 */}
+        <Card title="Agent 如何使用">
+          <div className="flex items-start gap-3">
+            <Activity className="w-5 h-5 text-[var(--color-accent)] shrink-0 mt-0.5" />
+            <div className="space-y-2 text-sm leading-relaxed text-[var(--color-text-secondary)]">
+              <p>Agent 通过 MCP 连接本机 Live Bridge，推荐流程：</p>
+              <ol className="list-decimal list-inside space-y-1.5 text-[var(--color-text-primary)]">
+                <li><InlineCode>browser_connect</InlineCode> — 带 <InlineCode>code</InlineCode> 自动打开指定 profile；不带 code 则附着当前实例</li>
+                <li><InlineCode>browser_observe</InlineCode> / <InlineCode>browser_snapshot</InlineCode> — 确认是否在登录页、获取 ref</li>
+                <li><InlineCode>browser_click</InlineCode> / <InlineCode>browser_type</InlineCode> / <InlineCode>browser_navigate</InlineCode> — 执行操作</li>
+                <li><InlineCode>browser_wait_for</InlineCode> — 等待页面条件，避免盲等</li>
+              </ol>
+              <p className="text-[var(--color-text-muted)]">支持最多 8 个 Agent 并发连接；仅监听 127.0.0.1，不暴露外网。</p>
+            </div>
+          </div>
+        </Card>
+
+        {/* 高级 / 折叠 */}
+        <button
+          type="button"
+          className="flex items-center gap-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+          onClick={() => setShowAdvanced((v) => !v)}
+        >
+          {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          高级信息
+        </button>
+        {showAdvanced && (
+          <Card>
+            <div className="space-y-2 text-sm text-[var(--color-text-secondary)] leading-relaxed">
+              <div className="flex items-start gap-2">
+                {info?.apiAuth?.enabled ? (
+                  <>
+                    <XCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--color-warning)' }} />
+                    <span>已启用 Launch API 鉴权（{info.apiAuth.header}），MCP 需配置环境变量或扩展脚本传 Key</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--color-success)' }} />
+                    <span>未启用鉴权，本机 Agent 可直接连接</span>
+                  </>
+                )}
+              </div>
+              <p>
+                HTTP：<InlineCode>{info?.baseUrl ?? 'http://127.0.0.1:19876'}</InlineCode>
+                {' · '}
+                健康检查 <InlineCode>/api/health</InlineCode>
+              </p>
+              <p>
+                CLI 调试：<InlineCode>node …/live-bridge-cmd.mjs send profile {'{"code":"BUPM2Z"}'}</InlineCode>
+                （Skill 目录内 scripts/，开发者用）
+              </p>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 text-[var(--color-accent)] hover:opacity-80 font-medium"
+                onClick={() => void openSkillDir()}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                打开 Skill 目录查看 reference.md
+              </button>
             </div>
           </Card>
-        </div>
-      </div>
-
-      {/* 底部提示 */}
-      <div className="px-4 py-2 text-xs text-slate-500 border-t border-slate-800 bg-slate-900/40">
-        服务端 WS 端点 <code className="text-slate-300">ws://127.0.0.1:&lt;launchPort&gt;/api/live-bridge</code> · Launch 启停会同步挂载/卸载 · 同时仅允许 1 个 ws 连接（新连接会顶替旧连接）
+        )}
       </div>
     </div>
   )

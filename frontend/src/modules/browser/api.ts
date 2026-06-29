@@ -577,6 +577,36 @@ export async function openPlaywrightScriptPath(folderId: string, relativePath?: 
   return false
 }
 
+/** 在资源管理器中打开 Live Bridge Agent Skill 目录（供导入其他 AI Agent） */
+export async function openLiveBridgeSkillDir(): Promise<string | null> {
+  const bindings: any = await getBindings()
+  if (bindings?.OpenLiveBridgeSkillDir) {
+    const path = await bindings.OpenLiveBridgeSkillDir()
+    return typeof path === 'string' ? path : null
+  }
+  const goApp = (window as any).go?.main?.App
+  if (goApp?.OpenLiveBridgeSkillDir) {
+    const path = await goApp.OpenLiveBridgeSkillDir()
+    return typeof path === 'string' ? path : null
+  }
+  return null
+}
+
+/** Live Bridge Skill 目录绝对路径（用于生成 MCP 配置） */
+export async function fetchLiveBridgeSkillDir(): Promise<string | null> {
+  const bindings: any = await getBindings()
+  if (bindings?.GetLiveBridgeSkillDir) {
+    const path = await bindings.GetLiveBridgeSkillDir()
+    return typeof path === 'string' ? path : null
+  }
+  const goApp = (window as any).go?.main?.App
+  if (goApp?.GetLiveBridgeSkillDir) {
+    const path = await goApp.GetLiveBridgeSkillDir()
+    return typeof path === 'string' ? path : null
+  }
+  return null
+}
+
 // ============================================================================
 // Cookie API
 // ============================================================================

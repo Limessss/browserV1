@@ -2,12 +2,13 @@
 
 ## 修改脚本前的硬性要求（人 / AI 同守）
 
-**任何**对 `playwright_scripts/**` 下 `*.mjs` 或 `mcp_*.md` 的修改，**都必须**在改仓库之前，先通过 **已连接本机真实浏览器** 完成页上验证：
+**任何**对 `playwright_scripts/**` 下 `*.mjs` 或 `mcp_*.md` 的修改，**都必须**在改仓库之前，先通过 **已连接本机真实浏览器** 完成页上验证。连接方式**优先级**如下：
 
-- 使用 **Playwright MCP** 附着带登录态的 **CDP**（`mcp.json` 中 `--cdp-endpoint=...` 指向本机可调试实例），在目标站点**真实页面**上把流程跑通；**或**
-- MCP 不可用时，用**同一 CDP** 在本机执行 `node .../xxx.mjs --cdp <你的 CDP URL>`（或项目约定的 Launch 方式），**仍是在真实浏览器里**验证，不是无头猜页面。
+1. **NexBrowser Live Bridge**（**探针首选**）——按环境码 `profile` / `browser_connect({ code })` 自动 Launch 或复用实例，用 `snapshot` / `observe` / `evaluate` 在真实页上逐步验证；Cursor 注册 MCP（`.cursor/skills/nexbrowser-live-bridge/scripts/mcp-live-bridge.mjs`）或终端 `live-bridge-cmd.mjs -f batch.json`。详见 [`docs/live-bridge/README.md`](../docs/live-bridge/README.md) 与 [`.cursor/skills/nexbrowser-live-bridge/SKILL.md`](../.cursor/skills/nexbrowser-live-bridge/SKILL.md)。
+2. **Playwright MCP**——附着带登录态的 **CDP**（`mcp.json` 中 `--cdp-endpoint=...`），在目标站点用 `browser_navigate` / `browser_snapshot` / `browser_click` 等跑通流程。
+3. **终端脚本 + CDP / Launch API**——Live Bridge 与 Playwright MCP 均不可用时，用同一 CDP 执行 `node .../xxx.mjs --useLaunchApi --code <环境码>` 或 `--cdp <url>`（**仍是在真实浏览器里**验证，不是无头猜页面）。
 
-**禁止**：未接通 CDP、未在真实页上点通流程，就凭记忆或「对齐其它脚本」去改选择器、URL、点击顺序。**Cursor / 其它自动化助手**在收到「改脚本、修可用性、同步选择器」等任务时，**同样必须先完成上述真实浏览器调试**；若当前环境无法连接用户本机 CDP，应**明确说明无法代你完成页上验证**，并请用户贴出实测现象或快照结论后，**再**据实改代码，而不是先改代码再补理由。
+**禁止**：未接通真实浏览器、未在真实页上点通流程，就凭记忆或「对齐其它脚本」去改选择器、URL、点击顺序。**Cursor / 其它自动化助手**在收到「改脚本、修可用性、同步选择器」等任务时，**同样必须先完成上述真实浏览器调试**；若当前环境无法连接用户本机浏览器，应**明确说明无法代你完成页上验证**，并请用户贴出实测现象或快照结论后，**再**据实改代码，而不是先改代码再补理由。
 
 下列「开发/修改流程」与本段同等效力，须一并遵守。
 
@@ -25,8 +26,155 @@
 在 **`playwright_scripts`** 目录内：
 
 1. **每个独立业务流程** 使用 **同名子文件夹**，内含 **`mcp_<主题>.md`**（Cursor MCP 步骤）与 **`*.mjs`**（可执行脚本），二者同步维护。
-2. **Markdown** 写清楚：`browser_navigate` / `browser_click` / 快照要点、前置登录或 CDP。
+2. **Markdown** 写清楚：探针优先 **Live Bridge**（`profile` / `navigate` / `evaluate` / `snapshot`）或 Playwright MCP 步骤、前置登录或 CDP。
 3. **脚本** 写清楚：入口 URL、`getByRole` 与文档一致、连接方式（Launch API / CDP / Edge / Chromium）。
+4. **运行时页面步骤 Toast**（硬性要求，见下节「页面步骤 Toast 规范」）：关键节点必须在浏览器页面上显示中文步骤说明。
+5. **禁止 dry-run 模式**（硬性要求，见下节「禁止 dry-run」）：脚本一律真实执行，不提供 `--dryRun` 等只验证不提交的开关。
+
+---
+
+## 页面步骤 Toast 规范（硬性要求）
+
+用户在 Launch 实例里**看着浏览器跑脚本**时，需要知道当前进行到哪一步。每个业务脚本必须在**关键操作节点**调用 Toast，在页面底部显示 **3 秒一闪** 的中文提示；终端 `console.log` 同步输出同样文案。
+
+### 统一实现
+
+- **推荐**：从共享模块引入，不要各脚本复制粘贴 UI 代码：
+
+```js
+import { logProgress, showPageToast, showPageResultModalUntilAck } from '../_lib/page_runtime_ui.mjs'
+```
+
+| 函数 | 用途 |
+|------|------|
+| `logProgress(page, msg)` | `console.log` + `showPageToast` 二合一（最常用） |
+| `showPageToast(page, msg)` | 仅页面 Toast |
+| `showPageResultModalUntilAck(page, opts)` | 任务结束汇总弹窗（单区域 1 次 / 多区域最后 1 次） |
+
+- **常量**（由 `_lib/page_runtime_ui.mjs` 导出，勿自行改数值）：
+  - `PAGE_TOAST_MS = 3000`：每条 Toast 展示时长
+  - `PAGE_TOAST_DOM_ID = 'ant-playwright-top-toast'`：DOM 根节点 id（全脚本共用）
+  - `PAGE_MODAL_IDLE_BROWSER_CLOSE_MS = 30000`：汇总 Modal 无操作 **30 秒**后自动关浏览器；`--keepOpen` 时不倒计时
+
+- **所有业务脚本**均从 `_lib/page_runtime_ui.mjs` 引入，**禁止**在脚本内复制 Toast / Modal 实现。
+
+### 文案格式
+
+- **前缀**：一律 `[脚本]`；多区域时加区域标签：`[脚本 [区域 2/5 · PH]]` 或 `[脚本] 开始… [区域 2/5 · PH]：…`
+- **语言**：简体中文，说明**正在做什么**，不要只打英文 debug 键名
+- **长度**：单条 ≤ 600 字符（模块内已截断）
+- **示例**：
+  - `[脚本] 开始商品批量优化更新：区域 MY`
+  - `[脚本] 第 2/20 轮：正在打开商品优化页（区域 MY）`
+  - `[脚本] 第 3 批：已点击「更新 5 件商品」（5 件）`
+  - `[脚本] 区域 MY 已完成，继续下一区域：PH`
+
+### 必须覆盖的节点（按脚本类型取舍）
+
+| 类型 | 建议 Toast 节点 |
+|------|----------------|
+| 通用 | 任务开始、当前区域/店铺、关键步骤开始、单步成功/失败、区域切换、任务结束 |
+| 多步骤循环 | 循环序号（`i/n`）、当前处理对象 id/名称 |
+| 有副作用提交 | 提交前一句、提交结果一句（成功 / 未完成 / 异常） |
+
+导航、等待 DOM、点按钮、调 API、写报告等**用户能感知耗时的步骤**都应有一句 Toast；纯内部重试、毫秒级轮询不必每条都打。
+
+### 视觉样式（由共享模块固定，勿改）
+
+- **位置**：`position: fixed`，贴页面**底部居中**，`z-index: 2147483646`
+- **交互**：`pointer-events: none`，不挡页面点击
+- **外观**：深色渐变底 + 左侧青紫竖条 + 圆角顶边；入场/退场用 `ant-pw-toast-in` / `ant-pw-toast-out` 动画
+- **汇总 Modal**：全屏半透明遮罩 + 居中面板；标题 + 等宽字体明细；「确定」按钮；非 `--keepOpen` 时按钮显示 `确定（mm:ss）` 倒计时
+
+### 结束汇总 Modal
+
+- **单区域**：跑完后弹 1 次，列出成功/失败数、关键 id、错误摘要
+- **多区域**：全部跑完后**只弹 1 次**汇总（不要在每个 region 各弹一次）
+- `opts`: `{ title, variant: 'success'|'warning'|'danger', lines: string[] }`；是否保持浏览器由命令行 `--keepOpen` 决定（模块内自动读取，**不要**写入 `defaultArgs`，调用时也无需再传）
+- 同步更新 `mcp_*.md` 增加「页面运行步骤说明」表格；`script.json` 的 `argsHint` 注明已支持 Toast / 汇总 Modal
+
+### 自检清单（Toast）
+
+- [ ] 已从 `_lib/page_runtime_ui.mjs` 引入（未内联复制 UI 代码）
+- [ ] 任务开始、主要步骤、循环进度、结束/切换区域均有 `[脚本]` Toast
+- [ ] 终端日志与页面 Toast 文案一致（用 `logProgress`）
+- [ ] 单/多区域结束有汇总 Modal（`--keepOpen` 时不自动关浏览器）
+- [ ] `mcp_*.md` 有步骤说明表；`script.json` 的 `argsHint` 已提及
+
+---
+
+## 启动参数面板（硬性要求）
+
+每个**业务脚本**在**浏览器连接成功后、进入业务 URL 之前**，必须调用共享模块打开参数 Tab（不阻塞主流程）：
+
+```js
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { openScriptArgsPanel } from '../_lib/script_args_panel.mjs'
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
+
+// connectOverCDP / Launch 拿到 browser 或 page 之后：
+await openScriptArgsPanel(page, { scriptDir: SCRIPT_DIR })
+// 或 await openScriptArgsPanel(connection.browser, { scriptDir: SCRIPT_DIR })
+```
+
+| 模块 | 说明 |
+|------|------|
+| `_lib/script_args_panel.mjs` | `openScriptArgsPanel`：新开 Tab，展示本轮参数 + 表单编辑保存 |
+| `_lib/script_args_store.mjs` | 读写 `playwright_scripts/_user_defaults/<scriptId>.json` |
+| `_lib/script_args_form.mjs` | `argForm` 与 CLI `defaultArgs` 互转、人类可读摘要 |
+
+### 面板内容
+
+1. **本轮正在使用的参数**（只读）：按 `argForm` 字段转成中文摘要（无表单时显示原始 CLI）
+2. **我的默认启动设置**（可编辑）：`script.json` 中配置 **`argForm`** 时渲染为输入框 / 勾选 / 下拉 / 多选；保存后写入 `_user_defaults/`
+
+### script.json 的 `argForm`（推荐）
+
+在 `script.json` 增加 `argForm` 数组，参数面板自动切换为**表单模式**（无则退回「每行一个参数」文本模式）。
+
+| 字段属性 | 说明 |
+|----------|------|
+| `type` | `info`（说明条）、`boolean`、`text`、`number`、`select`、`multiselect` |
+| `id` | 表单控件 id（`showWhen` 引用） |
+| `flag` | 对应 CLI，如 `--code` |
+| `label` | 用户可见标题 |
+| `description` | 字段下方灰色说明（必填，写清用途与示例） |
+| `default` | 出厂默认值 |
+| `asFlag` | `boolean` 专用：为 true 时勾选即追加 flag（无值） |
+| `options` | `select` / `multiselect` 选项：`{ value, label }` |
+| `showWhen` | 条件显示，如 `{ "use_launch": true }` |
+| `required` | 前端标红星（保存时仍由用户自行确认） |
+
+参考实现：各业务目录 `script.json` 的 `argForm`（7 个 TikTok 脚本均已配置）。
+
+### 约定
+
+- **禁止**在业务脚本内复制参数面板 HTML/CSS；一律 `import` 共享模块。
+- **不要**把 `--keepOpen` 写入 `defaultArgs`；调试时手动加 CLI 即可。
+- CI / 无 UI 跑法可加 `--skip-args-panel` 或 `SKIP_SCRIPT_ARGS_PANEL=1`。
+- 多区域脚本：仅在**首次**连上浏览器时打开一次面板（如 `regionIndex === 0`）。
+- 无浏览器分支（如 `--from_json` 纯离线）可跳过。
+
+### 自检清单（参数面板）
+
+- [ ] 已 `import openScriptArgsPanel` 且在连上浏览器后调用
+- [ ] `scriptDir` 指向本业务目录（含 `script.json`）
+- [ ] `mcp_*.md` / `argsHint` 注明支持参数面板与 `_user_defaults` 覆盖
+
+---
+
+## 禁止 dry-run（硬性要求）
+
+**所有业务脚本不提供、不保留 dry-run / 只验证不执行 模式。**
+
+- **禁止**：`--dryRun`、`--dry-run`、`--strict-dryrun` 等 CLI 开关，以及「只定位按钮不点击」「只打日志不真实提交」「跳过 POST/标记」等分支。
+- **必须**：脚本默认即**真实副作用**（更新商品、DOM 提报、发送邀约、ERP 采集、发布视频等）。需要观察页面时用 `--keepOpen` 保持浏览器打开，或看 Toast / 汇总 Modal / 终端 JSON，而不是用 dry-run 代替。
+- **探针**：`_temp/` 内临时探针可停在提交前一步做定位，但**不得**把 dry-run 开关合进主 `.mjs`；探针验证通过后，主流程迁移为真实执行。
+- **文档**：`mcp_*.md`、`script.json`、`defaultArgs` 中不得再写 dryRun 示例或参数说明；历史报告 JSON 里的 `"dryRun": false` 仅为旧输出，可忽略。
+
+---
 
 ### 开发/修改流程（必守）
 
@@ -38,47 +186,66 @@
 
 对任何业务脚本的新建、调试、修改、修复，默认流程必须是：
 
-1. **先写探针，不先改主流程**
-   - 在对应业务目录下的 `_temp/` 子文件夹中新建或更新临时探针脚本，建议命名为 `<目标>.mjs` 或 `_probe_<目标>.mjs`。
-   - 不要把临时探针散放在业务目录根部；例如应使用 `playwright_scripts/<主题>/_temp/product_search.mjs`。
-   - 探针只验证一个具体问题，例如：打开弹窗、定位输入框、选择类目、搜索商品、处理确认框、读取本地存储、验证接口返回。
-   - 探针必须连接真实登录浏览器：优先 `--useLaunchApi --code <环境码>`，或通过同一 CDP `connectOverCDP`。
-   - 调试过程中创建的临时日志、截图、JSON 快照、HTML/DOM dump、测试数据文件，也必须统一放入 `_temp/`。
+1. **先用 Live Bridge 探针，不先改主流程**
+   - **首选**：NexBrowser Live Bridge——用户给了环境码时必须 `profile { "code": "BUPM2Z" }`（勿用 `attach` 挂错实例）。
+   - **Cursor**：注册 Live Bridge MCP 后使用 `browser_connect` → `browser_snapshot` / `browser_observe` → `browser_evaluate`（或 `click_ref`）单步验证。
+   - **终端**：用 `live-bridge-cmd.mjs` 发单条或 batch JSON（Windows 推荐 `-f batch.json`）：
 
-2. **探针必须得到可用结论**
+     ```bash
+     # 按 code 连接 + 观察当前页
+     node .cursor/skills/nexbrowser-live-bridge/scripts/live-bridge-cmd.mjs send profile "{\"code\":\"0ZF9ZK\"}"
+     node .cursor/skills/nexbrowser-live-bridge/scripts/live-bridge-cmd.mjs observe
+
+     # 一次连接多条命令（探针 batch 建议放在业务目录 _temp/）
+     node .cursor/skills/nexbrowser-live-bridge/scripts/live-bridge-cmd.mjs -f playwright_scripts/<主题>/_temp/live-bridge-<目标>.json
+     ```
+
+   - batch 内典型步骤：`profile` → `navigate` → `wait_for`（selector/text/url）→ `evaluate`（读 DOM / 测滚动 / 测 API）→ 可选 `snapshot` / `screenshot`。
+   - **禁止**为简单 DOM 探针新建临时 `.mjs`——能用 Live Bridge `evaluate` / `snapshot` 解决的，不要写脚本。
+   - Live Bridge 不便表达的长循环、写文件、复杂 ERP 联调时，再在 `_temp/` 写 `probe_*.mjs`（见下条）。
+
+2. **必要时写 `_temp/*.mjs` 探针（Live Bridge 的补充）**
+   - 在对应业务目录下的 `_temp/` 子文件夹中新建或更新临时探针，建议命名为 `probe_<目标>.mjs`。
+   - 不要把临时探针散放在业务目录根部；例如应使用 `playwright_scripts/<主题>/_temp/probe_scroll.mjs`。
+   - 探针只验证一个具体问题；必须连接真实登录浏览器：优先 `--useLaunchApi --code <环境码>`，或通过同一 CDP `connectOverCDP`。
+   - 调试过程中创建的 Live Bridge batch JSON、临时日志、截图、JSON 快照、HTML/DOM dump、测试数据，统一放入 `_temp/`。
+
+3. **探针必须得到可用结论**
    - 记录探针验证到的关键事实：URL、按钮/输入框文本、可用选择器、必要等待、DOM 状态、返回值、异常分支。
    - 如果探针未跑通，不能把猜测逻辑迁到主 `.mjs`。
    - 如果页面状态、弹窗、二次确认、异步刷新不稳定，要用探针覆盖“出现”和“不出现”两类分支。
 
-3. **再更新主 `.mjs`**
+4. **再更新主 `.mjs`**
    - 只迁移探针已验证可用的逻辑。
-   - 主流程改动要尽量局部，保留原有参数、返回结构和 dry-run 语义。
-   - 对真实提交、删除、覆盖、移动、批量变更等有副作用的动作，必须先用 dry-run 或探针验证到提交前一步；只有用户明确要求真实执行时才继续。
+   - 主流程改动要尽量局部，保留原有参数与返回结构；**不得**新增 dry-run 分支。
+   - 对提交、删除、覆盖、批量变更等有副作用的动作：用 Live Bridge 或 `_temp/` 探针验证到提交前一步，主流程迁移后**直接真实执行**；跑完用 Toast / 终端 JSON / 汇总 Modal 确认结果。
 
-4. **最后验证主流程**
+5. **最后验证主流程**
    - 先运行 `node --check <主脚本>.mjs`。
-   - 再用真实浏览器跑主流程 dry-run，确认探针逻辑迁移后仍然有效。
-   - 若用户要求真实提交，真实提交后要回读页面结果或脚本返回值，确认成功、失败或被弹窗拦截的具体原因。
+   - 再用真实浏览器跑主流程（可用 `--keepOpen` 观察 Toast 与汇总 Modal），确认探针逻辑迁移后仍然有效。
+   - 真实执行后回读页面结果或脚本返回值，确认成功、失败或被弹窗拦截的具体原因。
 
-5. **同步文档**
+6. **同步文档**
    - 主流程修复后，同步更新业务目录内的 `mcp_*.md`、`script.json` 参数说明或测试命令。
    - 任务完成后清空 `_temp/` 子文件夹内本次任务产生的所有临时文件，避免后续误用过期探针、日志或测试数据。
    - 若确有长期保留价值，应改造成正式诊断工具或正式数据文件并写入文档，而不是继续放在 `_temp/` 中。
 
-**特别禁止**：用户要求“修复问题”时直接改主 `.mjs`；应先用探针复现/定位/验证，再迁移到主流程。除非用户明确说“只改文案、只改常量、只改文档”，否则默认都按探针优先处理。
+**特别禁止**：用户要求“修复问题”时直接改主 `.mjs`；应**先用 Live Bridge 或 `_temp/` 探针**复现/定位/验证，再迁移到主流程。除非用户明确说“只改文案、只改常量、只改文档”，否则默认都按探针优先处理。
 
-1. **启动并接通 Playwright MCP**  
-   - 在 Cursor 中确认 **Playwright MCP 已启用且处于已连接状态**（对应你在 `mcp.json` 里配置的 `@playwright/mcp`，例如带 `--cdp-endpoint=...` 附着本机 CDP）。 
-   - 本机 **CDP 地址上须有可调试的浏览器实例**（通常先启动本应用 / Launch 服务，再唤起已登录卖家中心等目标的实例）。 
-   - **尚未接通 MCP、或 CDP 上还没有目标会话时，不要开始改脚本。**
+1. **启动并接通浏览器探针**  
+   - **首选 Live Bridge**：NexBrowser 主程序在跑；Cursor 启用 Live Bridge MCP，或终端 `live-bridge-cmd.mjs` 可连 `ws://127.0.0.1:19876/api/live-bridge`。  
+   - **或 Playwright MCP**：在 Cursor 中确认 **Playwright MCP 已启用且处于已连接状态**（`mcp.json` 里 `@playwright/mcp` 带 `--cdp-endpoint=...`）。  
+   - 本机 **须有可调试、已登录** 的浏览器实例（通常 `--useLaunchApi --code <环境码>` 或 Live Bridge `profile { code }` 自动拉起）。  
+   - **尚未接通探针、或目标页尚无登录会话时，不要开始改脚本。**
 
-2. **在真实页面上用 MCP 调试**  
-   - 使用 `browser_navigate`、必要时 `browser_snapshot` / `browser_click` / `browser_evaluate` 等，在**真实登录后的页面**上把流程跑通，并确认 **URL、交互步骤、选择器/文案、关键 DOM** 与线上一致。
+2. **在真实页面上用 Live Bridge / MCP 调试**  
+   - Live Bridge：`profile` → `navigate` → `wait_for` → `snapshot` / `evaluate` 单步确认 **URL、交互步骤、选择器/文案、关键 DOM**。  
+   - Playwright MCP：`browser_navigate`、`browser_snapshot`、`browser_click`、`browser_evaluate` 等等价步骤。
 
 3. **最后再更新仓库**  
-   - 将上述实测结论写入 **`mcp_*.md`** 与 **`*.mjs`**。
+   - 将上述实测结论写入 **`mcp_*.md`** 与 **`*.mjs`**；探针 batch JSON 或结论摘要写入业务目录 `_temp/`（任务结束后按需清理）。
 
-**若 MCP 始终无法连上本机 CDP**：不得跳过页上验证；须改用同一 CDP 的等价手段（见下段）：在本机执行 `node .../xxx.mjs --cdp http://127.0.0.1:19876`（地址以你环境为准）或临时 `connectOverCDP` 探测，**仍然是在真实页面上的调试**，再把结论写回 `mcp_*.md` 与脚本。
+**若 Live Bridge 与 Playwright MCP 均无法连上本机浏览器**：不得跳过页上验证；须改用同一 CDP 的等价手段（见下段）：在本机执行 `node .../xxx.mjs --useLaunchApi --code <环境码>` 或 `--cdp http://127.0.0.1:19876`，**仍然是在真实页面上的调试**，再把结论写回 `mcp_*.md` 与脚本。
 
 ### CDP 与 Launch 默认端口 `19876`（本应用）
 
@@ -105,6 +272,12 @@ MCP 应配置为附着**已登录**的浏览器（例如 `mcp.json` 中 `--cdp-e
 
 **Playwright MCP（Cursor）**  
 在 `mcp.json` 里为 Playwright MCP 配置 **`--cdp-endpoint=`**，与上列 **同一** CDP 地址（常用有活跃实例时的 **`http://127.0.0.1:19876`**），这样 MCP 与终端脚本附着**同一台**真实浏览器。
+
+**NexBrowser Live Bridge（探针首选）**  
+WebSocket：`ws://127.0.0.1:19876/api/live-bridge`（与 Launch 同端口）。**不依赖**事先手动 Launch——`profile { code }` 会按环境码自动拉起或复用实例。  
+- Cursor：`.cursor/mcp.json` 注册 `nexbrowser` → `node .cursor/skills/nexbrowser-live-bridge/scripts/mcp-live-bridge.mjs`  
+- 终端：`node .cursor/skills/nexbrowser-live-bridge/scripts/live-bridge-cmd.mjs -f <batch.json>`  
+- 文档：[`docs/live-bridge/README.md`](../docs/live-bridge/README.md)
 
 ---
 
@@ -135,11 +308,12 @@ node playwright_scripts/launch_and_connect/launch_and_connect.mjs
 
 ## 新增一组时的检查清单
 
-- [ ] **已先连接真实浏览器（MCP→CDP 或 `node ... --cdp ...` 等价），并在目标页完成调试**，再编写/修改 `*.mjs` 与 `mcp_*.md`（助手改脚本前同样勾选此项）
-- [ ] 已先在业务目录的 `_temp/` 子文件夹内创建/更新探针，并用探针在真实浏览器中复现或验证目标问题
+- [ ] **已先用 Live Bridge 或 MCP/CDP 连接真实浏览器，并在目标页完成调试**，再编写/修改 `*.mjs` 与 `mcp_*.md`（助手改脚本前同样勾选此项）
+- [ ] 已用 **Live Bridge batch / evaluate** 或业务目录 `_temp/` 内探针，在真实浏览器中复现或验证目标问题
 - [ ] 探针已得到明确可用结论：可用选择器、点击顺序、等待条件、异常分支、页面返回值或本地存储结果
 - [ ] 只把探针验证通过的逻辑迁移到主 `<主题>.mjs`，未验证的猜测逻辑不进主流程
-- [ ] 主 `<主题>.mjs` 已通过 `node --check`，并至少完成一次真实浏览器 dry-run 验证
+- [ ] 主 `<主题>.mjs` 已通过 `node --check`，并至少完成一次真实浏览器验证（含 Toast / 汇总 Modal）
+- [ ] 关键步骤已接 `logProgress` / `showPageToast`，结束有汇总 Modal；**无** `--dryRun` 参数或分支
 - [ ] 临时日志、截图、JSON 快照、DOM dump、测试数据等调试产物均放入 `_temp/`
 - [ ] 任务完成后已清空 `_temp/` 子文件夹内本次任务产生的临时文件
 - [ ] 新建文件夹 `playwright_scripts/<主题>/`

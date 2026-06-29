@@ -14,7 +14,7 @@
     "lint": "tsc --noEmit -p backend/tsconfig.json && tsc --noEmit -p frontend/tsconfig.json",
     "smoke:runtime": "node scripts/smoke-runtime-check.mjs",
     "fetch:xray:win": "node scripts/fetch-xray-windows.mjs",
-    "icons": "node scripts/generate-icons.mjs",
+    "icons": "node scripts/fix-logo-transparency.mjs && node scripts/generate-icons.mjs",
     "dist": "npm run build && npm run icons && electron-builder",
     "dist:win": "npm run build && npm run icons && npm run fetch:xray:win && electron-builder --win",
     "dist:win:installer": "npm run build && npm run icons && npm run fetch:xray:win && electron-builder --win --x64 -c.win.target=nsis"
@@ -24,11 +24,13 @@
     "bufferutil": "^4.1.0",
     "chromium-bidi": "^16.0.1",
     "clsx": "^2.1.1",
+    "defuddle": "^0.19.0",
     "electron-updater": "^6.6.2",
     "http-proxy": "^1.18.1",
     "http-proxy-agent": "^7.0.2",
     "https-proxy-agent": "^7.0.6",
     "js-yaml": "^4.1.1",
+    "linkedom": "^0.18.12",
     "lucide-react": "^0.292.0",
     "playwright": "^1.59.1",
     "react": "^18.3.1",
@@ -154,6 +156,48 @@
       {
         "from": "node_modules/utf-8-validate",
         "to": "node_modules/utf-8-validate",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "node_modules/defuddle",
+        "to": "node_modules/defuddle",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "node_modules/linkedom",
+        "to": "node_modules/linkedom",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "node_modules/turndown",
+        "to": "node_modules/turndown",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "node_modules/mathml-to-latex",
+        "to": "node_modules/mathml-to-latex",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "node_modules/temml",
+        "to": "node_modules/temml",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": ".cursor/skills/nexbrowser-live-bridge",
+        "to": "skills/nexbrowser-live-bridge",
         "filter": [
           "**/*"
         ]

@@ -5,9 +5,89 @@
   "entry": "tiktok_ads_gmv_max_dashboard.mjs",
   "order": 35,
   "tags": ["playwright", "tiktok", "ads", "gmv-max", "dashboard", "report"],
-  "version": "1.0.0",
+  "version": "1.2.0",
   "defaultArgs": ["--useLaunchApi", "--code", "IKXSD8", "--aadvid", "7581297450980294657", "--date_range", "today"],
-  "argsHint": "必须传 --aadvid 广告账号ID；日期用 --date_range，默认 today，可选 today/yesterday/last7/last30/last3m/last6m/last12m。脚本会访问 /gmv-max/dashboard?aadvid=<ID>&oec_seller_id=withoutShop。",
+  "argsHint": "可在启动参数面板图形化配置；亦支持 CLI。",
   "requiresLaunchServer": true,
-  "mcpDoc": "mcp_tiktok_ads_gmv_max_dashboard.md"
+  "mcpDoc": "mcp_tiktok_ads_gmv_max_dashboard.md",
+  "argForm": [
+    {
+      "type": "info",
+      "text": "本脚本会打开 TikTok Ads GMV Max 仪表盘，逐个切换店铺读取广告概览并生成报告。需已登录广告账号。"
+    },
+    {
+      "id": "use_launch",
+      "flag": "--useLaunchApi",
+      "type": "boolean",
+      "asFlag": true,
+      "label": "通过 NexBrowser 自动连接浏览器",
+      "description": "推荐开启：使用已登录 TikTok Ads 的实例。",
+      "default": true
+    },
+    {
+      "id": "code",
+      "flag": "--code",
+      "type": "text",
+      "label": "环境码",
+      "description": "NexBrowser 中已登录广告后台的实例 code。",
+      "placeholder": "例如 IKXSD8",
+      "default": "IKXSD8",
+      "required": true,
+      "showWhen": { "use_launch": true }
+    },
+    {
+      "id": "cdp",
+      "flag": "--cdp",
+      "type": "text",
+      "label": "CDP 调试地址",
+      "description": "直连已打开浏览器时使用。",
+      "placeholder": "http://127.0.0.1:19876",
+      "showWhen": { "use_launch": false }
+    },
+    {
+      "id": "aadvid",
+      "flag": "--aadvid",
+      "type": "text",
+      "label": "广告账号 ID（aadvid）",
+      "description": "必填。在 GMV Max 仪表盘 URL 中可见，例如 7581297450980294657。",
+      "placeholder": "7581297450980294657",
+      "default": "7581297450980294657",
+      "required": true
+    },
+    {
+      "id": "date_range",
+      "flag": "--date_range",
+      "type": "select",
+      "label": "统计日期范围",
+      "description": "对应仪表盘日期选择器中的快捷项。",
+      "default": "today",
+      "options": [
+        { "value": "today", "label": "今天" },
+        { "value": "yesterday", "label": "昨天" },
+        { "value": "last7", "label": "近 7 天" },
+        { "value": "last30", "label": "近 30 天" },
+        { "value": "last3m", "label": "近 3 个月" },
+        { "value": "last6m", "label": "近 6 个月" },
+        { "value": "last12m", "label": "过去 12 个月" }
+      ]
+    },
+    {
+      "id": "max_shops",
+      "flag": "--max_shops",
+      "type": "number",
+      "label": "最多处理店铺数",
+      "description": "自动识别「切换到其他店铺」列表时，最多采集几个店铺的数据，默认 50。",
+      "default": 50,
+      "min": 1,
+      "max": 100
+    },
+    {
+      "id": "shops",
+      "flag": "--shops",
+      "type": "text",
+      "label": "指定店铺（可选）",
+      "description": "留空则自动识别全部；填写时用逗号分隔店铺名，或 JSON 数组字符串。",
+      "placeholder": "留空=自动"
+    }
+  ]
 }

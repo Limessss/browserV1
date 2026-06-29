@@ -116,6 +116,8 @@ import {
 import { getSqlite } from '../internal/database/sqlite-store'
 import {
   openCorePathInExplorer,
+  openLiveBridgeSkillDirInExplorer,
+  getLiveBridgeSkillDirPath,
   openPlaywrightScriptPathInExplorer,
   openPlaywrightScriptsRootInExplorer,
   openUserDataDir,
@@ -422,6 +424,20 @@ export async function invokeGoCall(method: string, args: unknown[]): Promise<unk
       }
       throw new Error(String(e))
     }
+  }
+  if (method === 'OpenLiveBridgeSkillDir') {
+    try {
+      return await openLiveBridgeSkillDirInExplorer()
+    } catch (e) {
+      console.error('[go-call]', method, e)
+      if (e instanceof Error) {
+        throw e
+      }
+      throw new Error(String(e))
+    }
+  }
+  if (method === 'GetLiveBridgeSkillDir') {
+    return getLiveBridgeSkillDirPath()
   }
 
   if (method === 'ValidateProxyConfig') {

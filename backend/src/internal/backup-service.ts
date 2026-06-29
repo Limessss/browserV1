@@ -292,6 +292,13 @@ export async function backupExportPackage(): Promise<Record<string, unknown>> {
     app.getVersion() || '0.1.0',
     new Date(),
   )
+  emitExport('preparing', 12, '正在关闭运行中的浏览器实例...')
+  await stopBrowsersForMaintenance()
+  try {
+    persistSqlite()
+  } catch {
+    /* ignore */
+  }
   emitExport('preparing', 15, '开始写入备份包...')
   try {
     mkdirSync(dirname(savePath), { recursive: true })
@@ -311,9 +318,14 @@ export async function backupExportPackage(): Promise<Record<string, unknown>> {
       message: '导出完成',
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const raw = e instanceof Error ? e.message : String(e)
+    const msg = /EBUSY|resource busy|locked/i.test(raw)
+      ? `${raw}（请先关闭所有浏览器实例后重试）`
+      : raw
     emitExport('error', 100, `导出失败: ${msg}`)
     throw e
+  } finally {
+    void startLaunchHttpServer().catch((err) => console.error('[backup] restart launch server', err))
   }
 }
 

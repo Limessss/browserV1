@@ -16,6 +16,7 @@ import { resolveAppRelativePath } from './electron-paths'
 const MANIFEST_NAME = 'script.json'
 /** 用户可写 / 优先读取的脚本根目录（应用根相对路径） */
 const USER_SCRIPTS_REL = 'playwright_scripts'
+const USER_DEFAULTS_REL = join(USER_SCRIPTS_REL, '_user_defaults')
 /** 安装包内置脚本（只读模板，应用根相对路径） */
 const BUNDLED_SCRIPTS_REL = 'playwright_scripts.bundled'
 
@@ -53,6 +54,11 @@ export interface PlaywrightScriptItem extends PlaywrightScriptManifest {
   folderId: string
   manifestPath: string
   entryPath: string
+}
+
+export interface PlaywrightScriptUserDefaultsFile {
+  defaultArgs: string[]
+  updatedAt: string
 }
 
 export interface ListPlaywrightScriptsResult {
@@ -106,10 +112,16 @@ function parseManifest(raw: unknown, folderId: string): PlaywrightScriptManifest
   }
 }
 
+/** 以 `_` 开头的目录为内部资源（_lib、_coord、_user_defaults 等），不参与脚本清单扫描。 */
+function isPlaywrightScriptFolder(name: string): boolean {
+  const n = String(name ?? '').trim()
+  return n.length > 0 && !n.startsWith('_')
+}
+
 async function safeReadScriptFolders(dir: string): Promise<string[]> {
   try {
     const list = await readdir(dir, { withFileTypes: true })
-    return list.filter((d) => d.isDirectory()).map((d) => d.name)
+    return list.filter((d) => d.isDirectory() && isPlaywrightScriptFolder(d.name)).map((d) => d.name)
   } catch {
     return []
   }
@@ -180,6 +192,73 @@ async function resolveManifestPathForRead(
     }
   }
   return null
+}
+
+function userDefaultsStorageKey(script: Pick<PlaywrightScriptItem, 'id' | 'folderId'>): string {
+  const id = script.id?.trim()
+  return id || script.folderId
+}
+
+function userDefaultsFilePathForKey(storageKey: string): string {
+  const safe = storageKey.replace(/[/\\]/g, '_')
+  return resolveAppRelativePath(join(USER_DEFAULTS_REL, `${safe}.json`))
+}
+
+export function getEffectiveDefaultArgs(
+  script: PlaywrightScriptManifest,
+  userDefaults: string[] | null | undefined,
+): string[] {
+  if (userDefaults && userDefaults.length > 0) return userDefaults
+  return script.defaultArgs ?? []
+}
+
+export async function loadUserDefaultArgsForScript(
+  script: PlaywrightScriptItem,
+): Promise<string[] | null> {
+  const file = await loadUserDefaultsFileForScript(script)
+  return file?.defaultArgs ?? null
+}
+
+export async function loadUserDefaultsFileForScript(
+  script: PlaywrightScriptItem,
+): Promise<PlaywrightScriptUserDefaultsFile | null> {
+  const fp = userDefaultsFilePathForKey(userDefaultsStorageKey(script))
+  try {
+    const raw = JSON.parse(await readFile(fp, 'utf8')) as unknown
+    if (!isRecord(raw) || !Array.isArray(raw.defaultArgs)) return null
+    const defaultArgs = raw.defaultArgs.filter((a): a is string => typeof a === 'string')
+    const updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : ''
+    return { defaultArgs, updatedAt }
+  } catch {
+    return null
+  }
+}
+
+export async function saveUserDefaultArgsForFolder(
+  folderId: string,
+  defaultArgs: unknown,
+): Promise<PlaywrightScriptUserDefaultsFile> {
+  const fid = String(folderId ?? '').trim()
+  if (!fid || fid.includes('..') || fid.includes('/') || fid.includes('\\')) {
+    throw new Error('无效的脚本目录 id')
+  }
+  const list = await listPlaywrightScripts()
+  const script = list.scripts.find((s) => s.folderId === fid)
+  if (!script) {
+    throw new Error(`未找到脚本: ${fid}`)
+  }
+  const cleaned =
+    Array.isArray(defaultArgs) && defaultArgs.every((a) => typeof a === 'string')
+      ? defaultArgs.map((a) => a.trim()).filter((a) => a.length > 0)
+      : []
+  const fp = userDefaultsFilePathForKey(userDefaultsStorageKey(script))
+  await mkdir(dirname(fp), { recursive: true })
+  const payload: PlaywrightScriptUserDefaultsFile = {
+    defaultArgs: cleaned,
+    updatedAt: new Date().toISOString(),
+  }
+  await writeFile(fp, `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
+  return payload
 }
 
 async function resolveScriptEntryPath(
@@ -381,11 +460,15 @@ export async function runPlaywrightScript(
       ? (extraArgs as string[])
       : []
 
+  const userDefaults = await loadUserDefaultArgsForScript(script)
+  const effectiveDefaults = getEffectiveDefaultArgs(script, userDefaults)
+
   const appRoot = resolveAppRelativePath('.')
   // 与「命令行只打一遍参数」一致：各 .mjs 里 getArgValue 多取 **首个** 出现的 flag。
   // 故「自动化页」的附加参数必须排在 script.json 的 defaultArgs **之前**，
   // 否则 --shop_region 等会被默认里的值盖住（先出现的是 PH，用户填的 MY 被忽略）。
-  const args = [script.entryPath, ...extra, ...(script.defaultArgs ?? [])]
+  // 用户于参数面板保存的 defaultArgs（_user_defaults）优先于 script.json。
+  const args = [script.entryPath, ...extra, ...effectiveDefaults]
   const nodeRunner = resolveNodeRunner()
   const runId = randomUUID()
 

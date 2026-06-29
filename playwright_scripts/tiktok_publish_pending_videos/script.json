@@ -5,9 +5,79 @@
   "entry": "tiktok_publish_pending_videos.mjs",
   "order": 32,
   "tags": ["playwright", "tiktok", "shop", "publish", "ai-video"],
-  "version": "1.0.1",
+  "version": "1.1.0",
   "defaultArgs": ["--cdp", "http://127.0.0.1:55638", "--shop_region", "MY", "--pages", "3"],
-  "argsHint": "--cdp 或 --useLaunchApi；--shop_region 支持单码、逗号或 JSON 数组依次执行；可选 --max --pages --keepOpen",
+  "argsHint": "可在启动参数面板图形化配置；亦支持 CLI。",
   "requiresLaunchServer": false,
-  "mcpDoc": "mcp_tiktok_publish_pending_videos.md"
+  "mcpDoc": "mcp_tiktok_publish_pending_videos.md",
+  "argForm": [
+    {
+      "type": "info",
+      "text": "本脚本会真实点击「在 TikTok 上发布」，将已生成的带货视频发布到店铺。请确认环境无误后再保存默认设置。"
+    },
+    {
+      "id": "use_launch",
+      "flag": "--useLaunchApi",
+      "type": "boolean",
+      "asFlag": true,
+      "label": "通过 NexBrowser 自动连接浏览器",
+      "description": "开启后用环境码 Launch；关闭则使用下方 CDP 地址连接已打开的浏览器。",
+      "default": false
+    },
+    {
+      "id": "code",
+      "flag": "--code",
+      "type": "text",
+      "label": "环境码",
+      "description": "使用 Launch API 时填写 NexBrowser 实例 code。",
+      "placeholder": "例如 AF7H54",
+      "showWhen": { "use_launch": true }
+    },
+    {
+      "id": "cdp",
+      "flag": "--cdp",
+      "type": "text",
+      "label": "CDP 调试地址",
+      "description": "NexBrowser Launch 后的调试端口，例如 http://127.0.0.1:55638",
+      "placeholder": "http://127.0.0.1:55638",
+      "default": "http://127.0.0.1:55638",
+      "showWhen": { "use_launch": false }
+    },
+    {
+      "id": "shop_region",
+      "flag": "--shop_region",
+      "type": "multiselect",
+      "label": "要执行的站点（按顺序）",
+      "description": "资源库 URL 与商品名称补全会按站点处理；多站点依次执行。",
+      "default": ["MY"],
+      "options": [
+        { "value": "MY", "label": "马来西亚 MY" },
+        { "value": "PH", "label": "菲律宾 PH" },
+        { "value": "SG", "label": "新加坡 SG" },
+        { "value": "TH", "label": "泰国 TH" },
+        { "value": "VN", "label": "越南 VN" },
+        { "value": "ID", "label": "印尼 ID" }
+      ]
+    },
+    {
+      "id": "pages",
+      "flag": "--pages",
+      "type": "number",
+      "label": "扫描列表页数",
+      "description": "在 material-2-video 资源库中翻页扫描「未发布/已部分发布」条目，默认 3 页。",
+      "default": 3,
+      "min": 1,
+      "max": 20
+    },
+    {
+      "id": "max",
+      "flag": "--max",
+      "type": "number",
+      "label": "最多发布视频数",
+      "description": "本轮最多成功发布几条视频，防止一次跑太久，默认 200。",
+      "default": 200,
+      "min": 1,
+      "max": 500
+    }
+  ]
 }

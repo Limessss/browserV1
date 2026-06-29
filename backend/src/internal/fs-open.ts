@@ -47,6 +47,37 @@ export async function openPlaywrightScriptsRootInExplorer(): Promise<void> {
   }
 }
 
+/** AI Agent Skill：开发态 .cursor/skills/…，安装包 skills/…（extraFiles） */
+export function resolveLiveBridgeSkillDir(): string {
+  const candidates = [
+    resolveAppRelativePath('.cursor/skills/nexbrowser-live-bridge'),
+    resolveAppRelativePath('skills/nexbrowser-live-bridge'),
+  ]
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      return p
+    }
+  }
+  return candidates[0]
+}
+
+export async function openLiveBridgeSkillDirInExplorer(): Promise<string> {
+  const skillDir = resolveLiveBridgeSkillDir()
+  if (!existsSync(skillDir)) {
+    mkdirSync(skillDir, { recursive: true })
+  }
+  const errMsg = await shell.openPath(skillDir)
+  if (errMsg) {
+    throw new Error(errMsg)
+  }
+  return skillDir
+}
+
+/** 返回 Skill 目录绝对路径（不打开资源管理器） */
+export function getLiveBridgeSkillDirPath(): string {
+  return resolveLiveBridgeSkillDir()
+}
+
 export async function openPlaywrightScriptPathInExplorer(
   folderId: string,
   relativePath?: string,

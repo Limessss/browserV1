@@ -53,6 +53,21 @@ node playwright_scripts/tiktok_ads_gmv_max_dashboard/tiktok_ads_gmv_max_dashboar
 | 4 | 逐个选择店铺并点击“下一步” |
 | 5 | 等待概览指标刷新，读取成本、总收入、ROI、SKU 订单数、平均下单成本 |
 
+## 页面运行步骤说明（showPageToast）
+
+运行时在页面底部显示 **3 秒一闪** 的中文提示（`[脚本]` 前缀）：
+
+| 阶段 | 页面提示示例 |
+|---|---|
+| 开始 | `[脚本] 开始 GMV Max 概览采集：日期 今天，aadvid=…` |
+| 打开 Dashboard | `[脚本] GMV Max Dashboard 已打开` |
+| 发现店铺 | `[脚本] 发现 N 个店铺，开始逐店采集` |
+| 逐店采集 | `[脚本] 采集店铺 1/5：ShopName` |
+| 单店完成 | `[脚本] 店铺 ShopName 完成 · GMV …` |
+| 报告生成 | `[脚本] 报告已生成：…json / …html` |
+
+结束后弹出 **汇总 modal**（各店 GMV/ROI/花费 + 报告路径）；未点「确定」约 30 秒后自动关浏览器（`--keepOpen` 时不倒计时）。
+
 ## 输出
 
 脚本会在 `reports` 目录生成：

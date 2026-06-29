@@ -12,6 +12,7 @@ import { resolveAppRelativePath } from './electron-paths'
 export type PlaywrightModule = typeof import('playwright')
 export type PlaywrightBrowser = import('playwright').Browser
 export type PlaywrightPage = import('playwright').Page
+export type PlaywrightBrowserContext = import('playwright').BrowserContext
 
 let cached: PlaywrightModule | null = null
 
