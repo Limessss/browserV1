@@ -1090,7 +1090,9 @@ async function run() {
     const outDir =
       getArgValue('--out_dir') || path.join(path.dirname(fileURLToPath(import.meta.url)), 'reports')
     const reports = await writeReports(payload, outDir)
-    console.log(JSON.stringify({ ok: true, mode: 'from_json', reports }, null, 2))
+    const result = { ok: true, status: 'success', mode: 'from_json', reports, folderId: path.dirname(fileURLToPath(import.meta.url)) }
+    console.log(JSON.stringify(result, null, 2))
+    console.log(`scriptResult: ${JSON.stringify(result)}`)
     return
   }
 
@@ -1098,6 +1100,7 @@ async function run() {
   const baseUrl = getArgValue('--baseUrl') || DEFAULT_BASE_URL
   const headed = hasFlag('--headed')
   const keepOpen = hasFlag('--keepOpen')
+  const showResultModal = hasFlag('--showResultModal') || (!useLaunchApi && !hasFlag('--noResultModal'))
   const cdpUrl = getArgValue('--cdp') || process.env.PLAYWRIGHT_CDP_URL || process.env.CDP_URL || ''
   const launchEdge = hasFlag('--launch-edge') || hasFlag('--msedge')
   const maxShops = getNumberArg('--max_shops', 50)
@@ -1129,6 +1132,7 @@ async function run() {
     const result = await runFlow(page, { shops, maxShops, outDir, aadvid, adAccount, dateRange })
     console.log(JSON.stringify(result, null, 2))
     if (!result.ok) process.exitCode = 1
+    console.log(`scriptResult: ${JSON.stringify({ ...result, status: result.ok ? 'success' : 'failed', folderId: scriptDir })}`)
 
     const summary = result.summary || {}
     const summaryLines = [
@@ -1149,7 +1153,7 @@ async function run() {
     }
     summaryLines.push('终端已输出完整 JSON。点击「确定」关闭。')
 
-    await showPageResultModalUntilAck(page, {
+    if (showResultModal) await showPageResultModalUntilAck(page, {
       title: result.ok ? 'GMV Max 采集已完成' : 'GMV Max 采集结束（部分失败）',
       variant: result.ok ? 'success' : 'warning',
       lines: summaryLines,

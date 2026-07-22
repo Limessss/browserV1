@@ -1,4 +1,0 @@
-[
-  { "cmd": "profile", "args": { "code": "BUPM2Z" } },
-  { "cmd": "snapshot", "args": { "maxChars": 30000 } }
-]

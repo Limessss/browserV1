@@ -477,8 +477,10 @@ async function run() {
   const baseUrl = getArgValue('--baseUrl') || DEFAULT_BASE_URL
   const cdpUrl = getArgValue('--cdp') || process.env.PLAYWRIGHT_CDP_URL || process.env.CDP_URL || ''
   const keepOpen = hasFlag('--keepOpen')
+  const useLaunchApi = hasFlag('--useLaunchApi')
+  const showResultModal = hasFlag('--showResultModal') || (!useLaunchApi && !hasFlag('--noResultModal'))
   const totalRegions = shopRegions.length
-  const conn = hasFlag('--useLaunchApi')
+  const conn = useLaunchApi
     ? await connectViaLaunchApi(baseUrl, firstPageUrl)
     : await connectOverCdp(cdpUrl || 'http://127.0.0.1:19876')
   const { page, close } = conn
@@ -549,6 +551,9 @@ async function run() {
         if (totalRegions > 1) {
           multiReport.push(report)
         } else {
+          console.log(`scriptResult: ${JSON.stringify({ ...report, status: report.ok ? 'success' : 'failed', folderId: SCRIPT_DIR })}`)
+        }
+        if (totalRegions === 1 && showResultModal) {
           await showPageResultModalUntilAck(page, {
             title: report.ok ? '任务已完成' : '任务结束',
             variant: skipped.length ? 'warning' : 'success',
@@ -577,6 +582,9 @@ async function run() {
             await showPageToast(page, `[脚本] 区域 ${shopRegion} 异常，继续下一区域：${shopRegions[ri + 1]}`)
           }
         } else {
+          console.log(`scriptResult: ${JSON.stringify({ ...report, status: 'failed', folderId: SCRIPT_DIR })}`)
+        }
+        if (totalRegions === 1 && showResultModal) {
           await showPageResultModalUntilAck(page, {
             title: '任务异常结束',
             variant: 'danger',
@@ -604,11 +612,14 @@ async function run() {
         summaryLines.push('')
       }
       if (!allOk) process.exitCode = 1
-      await showPageResultModalUntilAck(page, {
+      console.log(`scriptResult: ${JSON.stringify({ ok: allOk, status: allOk ? 'success' : 'failed', folderId: SCRIPT_DIR, shopRegions, reports: multiReport })}`)
+      if (showResultModal) {
+        await showPageResultModalUntilAck(page, {
         title: allOk ? '任务已完成' : '任务已结束（部分未完成）',
         variant: allOk && !hasSkipped ? 'success' : 'warning',
         lines: summaryLines,
-      })
+        })
+      }
     }
     if (keepOpen) await new Promise(() => {})
   } finally {

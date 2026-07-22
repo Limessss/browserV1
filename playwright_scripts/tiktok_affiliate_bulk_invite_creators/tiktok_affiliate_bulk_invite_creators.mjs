@@ -3564,6 +3564,8 @@ async function main() {
   }
 
   const keepOpen = hasFlag('--keepOpen')
+  const useLaunchApi = hasFlag('--useLaunchApi')
+  const showResultModal = hasFlag('--showResultModal') || (!useLaunchApi && !hasFlag('--noResultModal'))
   const totalRegions = shopRegions.length
   const startUrl = buildCreatorUrl(shopRegions[0])
   const connection = await connectBrowser(startUrl)
@@ -3601,15 +3603,16 @@ async function main() {
     }
     console.log(JSON.stringify(summary, null, 2))
     if (!allOk) process.exitCode = 1
+    console.log(`scriptResult: ${JSON.stringify({ ...summary, status: allOk ? 'success' : 'failed', folderId: SCRIPT_DIR })}`)
 
-    if (totalRegions === 1) {
+    if (showResultModal && totalRegions === 1) {
       const result = results[0]
       await showPageResultModalUntilAck(page, {
         title: result.ok ? '联盟邀约任务已完成' : '联盟邀约任务结束',
         variant: result.error ? 'danger' : result.ok ? 'success' : 'warning',
         lines: [...buildAffiliateResultLines(result), '', '终端已输出完整 JSON。点击「确定」关闭。'],
       })
-    } else if (results.length > 0) {
+    } else if (showResultModal && results.length > 0) {
       const summaryLines = [
         `配置区域（共 ${totalRegions} 个）：${shopRegions.join('、')}`,
         '',

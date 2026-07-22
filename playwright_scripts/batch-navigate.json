@@ -1,6 +1,0 @@
-[
-  { "cmd": "profile", "args": { "code": "BUPM2Z" } },
-  { "cmd": "navigate", "args": { "url": "https://affiliate.tiktokshopglobalselling.com/seller/im?enter_from=nav_im_entry&shop_region=PH&shop_id=8647748011034641431", "timeout": 30000 } },
-  { "cmd": "wait_for", "args": { "network_idle": true, "timeout": 15000 } },
-  { "cmd": "observe" }
-]

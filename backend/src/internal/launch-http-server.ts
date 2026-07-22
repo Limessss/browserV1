@@ -39,7 +39,9 @@ import { parseJsonArray, type ProfileRow } from './browser-data'
 import { getSqlite } from './database/sqlite-store'
 import {
   getEffectiveDefaultArgs,
+  getPlaywrightScriptRunInfo,
   killPlaywrightScriptRun,
+  listPlaywrightScriptRunInfos,
   listPlaywrightScripts,
   loadUserDefaultArgsForScript,
   loadUserDefaultsFileForScript,
@@ -525,6 +527,26 @@ function handlePlaywrightScriptKill(res: ServerResponse, runId: string): void {
   writeJson(res, 200, { ok: true, runId: id })
 }
 
+function handlePlaywrightScriptRunStatus(res: ServerResponse, runId: string): void {
+  const id = String(runId ?? '').trim()
+  if (!id) {
+    writeJson(res, 400, { ok: false, error: 'runId is required' })
+    return
+  }
+  const run = getPlaywrightScriptRunInfo(id)
+  if (!run) {
+    writeJson(res, 404, { ok: false, error: 'run not found' })
+    return
+  }
+  writeJson(res, 200, { ok: true, run })
+}
+
+function handlePlaywrightScriptRunsList(url: URL, res: ServerResponse): void {
+  const rawLimit = Number(url.searchParams.get('limit') || 50)
+  const limit = Number.isFinite(rawLimit) ? rawLimit : 50
+  writeJson(res, 200, { ok: true, runs: listPlaywrightScriptRunInfos(limit) })
+}
+
 function attachLaunchUpgradeHandler(server: http.Server): void {
  server.on('upgrade', (req, socket: Socket, head) => {
  const host = remoteIp(socket.remoteAddress ?? '')
@@ -787,6 +809,11 @@ async function handleLaunchHttpRequest(req: IncomingMessage, res: ServerResponse
       return
     }
 
+    if (pathname === '/api/playwright-scripts/runs' && method === 'GET') {
+      handlePlaywrightScriptRunsList(url, res)
+      return
+    }
+
     {
       const userDefaultsMatch = /^\/api\/playwright-scripts\/([^/]+)\/user-default-args$/.exec(pathname)
       if (userDefaultsMatch) {
@@ -805,8 +832,16 @@ async function handleLaunchHttpRequest(req: IncomingMessage, res: ServerResponse
 
     {
       const m = /^\/api\/playwright-scripts\/run\/([^/]+)$/.exec(pathname)
-      if (m && method === 'DELETE') {
-        handlePlaywrightScriptKill(res, m[1])
+      if (m) {
+        if (method === 'GET') {
+          handlePlaywrightScriptRunStatus(res, m[1])
+          return
+        }
+        if (method === 'DELETE') {
+          handlePlaywrightScriptKill(res, m[1])
+          return
+        }
+        writeJson(res, 405, { ok: false, error: 'method not allowed' })
         return
       }
     }

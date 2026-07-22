@@ -11,7 +11,7 @@
 ## 业务流程（两段）
 
 1. **Compass 单品卡** `/compass/single-product-card`  
-   - **不修改**页面日期筛选，使用 Compass **默认统计区间**（如「最近 7 天」等，以线上为准）。  
+   - 优先使用 Compass **默认统计区间**（如「最近 7 天」等，以线上为准）。若默认日期无商品或出现服务端错误，脚本会自动切到较长快捷范围（页面有「最近 28 天」则用 28 天；有「最近 30 天」则用 30 天）后重试。  
    - 点击「曝光」列表头，使商品按曝光 **降序**。  
    - 从表格解析前 **Top N**（默认 **10**）条：`product_id`、标题、主图 URL（解析逻辑与 `tiktok_compass_ereyesterday_top_products` 一致）。
 
@@ -71,6 +71,9 @@ node playwright_scripts/tiktok_compass_top10_random5_ai_video/tiktok_compass_top
 |------|------|------|
 | 1.1.0 | 06-11 | 初始发布（commit 24fe194） |
 | 1.1.1 | 06-20 | **修复系统性 `page.evaluate: Execution context was destroyed`** — 新增 `safePageEvaluate` helper（3 次 retry on destroyed + 每次 retry 前 `waitForLoadState('domcontentloaded')` 缓冲），替换 3 处 navigation 紧耦合的 evaluate：`readUrlShopRegionParam` + `gotoSellerPageRespectingShopRegion` 内 `window.location.replace` 触发点。修复是**纯增量 retry 包装**，行为兼容（3 次内成功 = 原 evaluate 1 次成功；3 次都 fail = 原 evaluate 抛 destroyed）。详见 handoff `devops-evaluate-destroyed-2026-06-20.md`。 |
+| 1.1.2 | 06-29 | 兼容新版 AI 视频生成器弹窗：最终提交按钮从「生成视频」变为「确认 (1 点信用额度)」时仍可识别；同时修正 `safePageEvaluate` 参数透传，并将 Compass 表格解析/日期读取纳入 retry 包装。已用 `BUPM2Z --shop_region PH --top_n 1 --pick_n 1` 验证成功。 |
+| 1.1.3 | 06-30 | Compass 默认最近 7 天无商品或服务端错误时，自动切到较长快捷日期（最近 30/28 天）后重试；同时兼容新版商品卡表格中仅以 `ID: ...` 文本展示商品 ID 的行。已用 `AF7H54 --shop_region MY --top_n 1 --pick_n 1` 验证成功。 |
+| 1.1.4 | 06-30 | 修复「选择一款商品」弹窗中商品 ID 已填入但不触发搜索的问题：填充后额外派发原生 input/change、按 Enter，并点击输入框右侧搜索图标/suffix。 |
 
 ## 已知间歇问题（已修 v1.1.1）
 

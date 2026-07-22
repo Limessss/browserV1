@@ -284,6 +284,8 @@ const DOC_API_INDEX = `# 接口总览
 | 调用记录 | GET | \`/api/launch/logs?limit=50\` | 查看最近接口调用与错误 |
 | 自动化脚本列表 | GET | \`/api/playwright-scripts\` | 列出 \`playwright_scripts/*/script.json\` 元信息（无绝对路径） |
 | 运行自动化脚本 | POST | \`/api/playwright-scripts/run\` | 启动与 UI「自动化脚本」等价的 \`node\` 任务，返回 \`runId\` |
+| 查询脚本运行状态 | GET | \`/api/playwright-scripts/run/{runId}\` | 查询指定脚本 run 的状态、退出码、stdout/stderr |
+| 最近脚本运行列表 | GET | \`/api/playwright-scripts/runs?limit=50\` | 查询最近脚本 run 状态 |
 | 终止脚本任务 | DELETE | \`/api/playwright-scripts/run/{runId}\` | 向子进程发送终止（已结束则 404） |
 
 说明：
@@ -946,6 +948,66 @@ curl -X POST http://127.0.0.1:19876/api/playwright-scripts/run \\
 \`\`\`
 
 错误：\`400\`（参数非法）、\`404\`（未找到 \`folderId\` 对应脚本）、\`500\`（启动失败）。
+
+## 查询任务状态
+
+\`\`\`
+GET /api/playwright-scripts/run/{runId}
+GET /api/playwright-scripts/runs?limit=50
+\`\`\`
+
+\`\`\`bash
+curl http://127.0.0.1:19876/api/playwright-scripts/run/550e8400-e29b-41d4-a716-446655440000
+curl http://127.0.0.1:19876/api/playwright-scripts/runs?limit=20
+\`\`\`
+
+单个任务响应示例：
+
+\`\`\`json
+{
+  "ok": true,
+  "run": {
+    "runId": "550e8400-e29b-41d4-a716-446655440000",
+    "folderId": "tiktok_shoppable_ai_video",
+    "status": "running",
+    "startedAt": "2026-06-30T09:30:00.000Z",
+    "finishedAt": null,
+    "code": null,
+    "signal": "",
+    "stdout": "",
+    "stderr": "",
+    "scriptResult": null,
+    "scriptResultRaw": ""
+  }
+}
+\`\`\`
+
+\`status\` 取值：\`running\`、\`success\`、\`failed\`、\`canceled\`。HTTP 服务会缓存最近 200 个 run；stdout/stderr 为内存缓存，超长时只保留尾部内容并返回 \`truncated: true\`。
+
+## 标准脚本结果
+
+脚本如果需要给编排系统返回业务结果，请在结束前向 stdout 输出一行：
+
+\`\`\`js
+console.log('scriptResult: ' + JSON.stringify({
+  ok: true,
+  summary: { success: 12, failed: 1 },
+  artifacts: ['C:/Nextask/reports/example.json']
+}))
+\`\`\`
+
+Launch 会解析 stdout 中最后一条 \`scriptResult\`，并在状态接口里返回：
+
+\`\`\`json
+{
+  "scriptResult": {
+    "ok": true,
+    "summary": { "success": 12, "failed": 1 },
+    "artifacts": ["C:/Nextask/reports/example.json"]
+  },
+  "scriptResultRaw": "{\\"ok\\":true,...}"
+}
+\`\`\`
 
 ## 终止任务
 

@@ -33,6 +33,124 @@
 
 ---
 
+## 结构化脚本结果 `scriptResult`（硬性要求）
+
+每个业务脚本在任务结束前，必须向 stdout 输出一行统一结构化结果，固定前缀为 `scriptResult:`。Launch API 会解析 stdout 中**最后一条** `scriptResult`，并在 `GET /api/playwright-scripts/run/{runId}` 的响应中返回 `run.scriptResult` 与 `run.scriptResultRaw`，供 Nextask 等编排系统判断真实业务结果。
+
+### 自动化运行完成规则
+
+当脚本通过 `--useLaunchApi` 被 Nextask / 工作流 / Agent 调度时，**业务完成即代表 run 完成**，不能再依赖用户点击页面结果弹窗，也不能因为 `NexBrowser.exe` 仍在保活就让 run 一直保持 `running`。
+
+统一规则如下：
+
+- `--useLaunchApi` 默认视为自动化模式：业务结束后必须输出最终 `scriptResult: {...}`，随后让脚本自然退出。
+- 自动化模式默认**不展示、不等待** `showPageResultModalUntilAck(...)`。需要人工调试时，显式传 `--showResultModal`。
+- 非自动化模式（例如手工 `--cdp` 调试）可以继续展示结果 Modal，方便人工查看。
+- `--keepOpen` 只用于人工观察页面状态，不应写入 `script.json` 的 `defaultArgs`，也不应出现在工作流默认参数里。
+- 如果脚本有多区域、多店铺或多阶段结果，可以输出中间 JSON 日志，但最后一条 `scriptResult` 必须是最终汇总结果。
+- 如果业务已经完成但页面仍需保留观察，应先输出 `scriptResult`，再根据 `--keepOpen` 决定是否等待；不要把等待弹窗当成业务完成条件。
+
+推荐写法：
+
+```js
+const useLaunchApi = hasFlag('--useLaunchApi')
+const keepOpen = hasFlag('--keepOpen')
+const showResultModal = hasFlag('--showResultModal') || (!useLaunchApi && !hasFlag('--noResultModal'))
+
+const result = {
+  ok: allOk,
+  status: allOk ? 'success' : 'failed',
+  summary,
+  errors,
+}
+
+console.log('scriptResult: ' + JSON.stringify(result))
+if (!allOk) process.exitCode = 1
+
+if (showResultModal) {
+  await showPageResultModalUntilAck(page, {
+    title: result.ok ? '任务已完成' : '任务结束',
+    variant: result.ok ? 'success' : 'warning',
+    lines,
+  })
+}
+
+if (keepOpen) await new Promise(() => {})
+```
+
+反例：
+
+```js
+console.log(JSON.stringify(summary, null, 2))
+await showPageResultModalUntilAck(page, opts)
+// 错误：自动化模式下会卡住，browserV1 / Nextask 只能看到 run 仍然 running。
+```
+
+### 输出格式
+
+```js
+console.log('scriptResult: ' + JSON.stringify({
+  ok: true,
+  status: 'success',
+  summary: {
+    success: 12,
+    failed: 0,
+    skipped: 1,
+  },
+  artifacts: [
+    'C:/Nextask/reports/example.json',
+  ],
+  data: {
+    shopCode: 'AF7H54',
+    regions: ['MY', 'PH'],
+  },
+  errors: [],
+}))
+```
+
+### 字段约定
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `ok` | 是 | 布尔值，业务是否成功完成；不是脚本进程是否启动成功。 |
+| `status` | 是 | 建议值：`success`、`partial`、`failed`、`canceled`。 |
+| `summary` | 否 | 汇总数量，如成功/失败/跳过/处理总数。 |
+| `artifacts` | 否 | 产物文件或目录路径数组，供后续节点引用。 |
+| `data` | 否 | 业务结构化结果，如店铺、地区、商品 ID、runId、目录等。 |
+| `errors` | 否 | 错误数组；即使 `ok: false`，也应尽量给出可读原因。 |
+
+### 失败时也必须输出
+
+业务失败、页面拦截、没有数据、部分成功等情况，也必须输出 `scriptResult`，再决定是否 `process.exit(1)`。示例：
+
+```js
+console.log('scriptResult: ' + JSON.stringify({
+  ok: false,
+  status: 'failed',
+  summary: { success: 0, failed: 1 },
+  artifacts: [],
+  data: { shopCode: 'AF7H54', region: 'PH' },
+  errors: [
+    { message: '关键词提交页没有找到可绑定商品', step: 'submit_keywords' },
+  ],
+}))
+process.exit(1)
+```
+
+### 自检清单（scriptResult）
+
+- [ ] 正常成功路径输出一条 `scriptResult: {...}`
+- [ ] 异常/失败路径也输出一条 `scriptResult: {...}`
+- [ ] `ok` 表示业务是否成功，不用来表示 HTTP 是否提交成功
+- [ ] 产物目录、报告文件、关键业务 ID 放入 `artifacts` 或 `data`
+- [ ] `errors` 中包含用户能看懂的失败原因和步骤名
+- [ ] stdout 中如有多条 `scriptResult`，最后一条必须代表最终结果
+- [ ] `--useLaunchApi` 自动化模式不等待 `showPageResultModalUntilAck(...)`
+- [ ] 需要弹结果窗口时，使用 `--showResultModal` 显式开启
+- [ ] `--keepOpen` 仅用于人工调试，不写入 `script.json.defaultArgs`
+
+---
+
 ## 页面步骤 Toast 规范（硬性要求）
 
 用户在 Launch 实例里**看着浏览器跑脚本**时，需要知道当前进行到哪一步。每个业务脚本必须在**关键操作节点**调用 Toast，在页面底部显示 **3 秒一闪** 的中文提示；终端 `console.log` 同步输出同样文案。

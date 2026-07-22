@@ -112,13 +112,20 @@ function regionCodeEq(a, b) {
  *
  * 探针: _temp/devops_probe_evaluate_destroyed.mjs (5+ 轮, 间歇 bug 未 100% 复现, 但 safePageEvaluate 验证 ok)
  */
-async function safePageEvaluate(page, fn, opts = {}) {
+async function safePageEvaluate(page, fn, argOrOpts = undefined, maybeOpts = {}) {
+  const thirdArgIsOpts =
+    arguments.length === 3 &&
+    argOrOpts &&
+    typeof argOrOpts === 'object' &&
+    ('maxRetries' in argOrOpts || 'waitBeforeRetry' in argOrOpts)
+  const hasEvalArg = arguments.length >= 3 && !thirdArgIsOpts
+  const opts = thirdArgIsOpts ? argOrOpts : maybeOpts
   const maxRetries = opts.maxRetries ?? 3
   const waitBeforeRetry = opts.waitBeforeRetry ?? 800
   const lastErr = { message: '' }
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      return await page.evaluate(fn)
+      return hasEvalArg ? await page.evaluate(fn, argOrOpts) : await page.evaluate(fn)
     } catch (e) {
       const msg = String(e?.message || e)
       lastErr.message = msg
@@ -432,7 +439,8 @@ async function trySortByExposureUsersDescending(page) {
  * @param {number} n
  */
 async function extractTopProductRows(page, n) {
-  return page.evaluate(
+  return safePageEvaluate(
+    page,
     (limit) => {
       const compact = (s) => String(s || '').replace(/\s+/g, ' ').trim()
 
@@ -487,6 +495,8 @@ async function extractTopProductRows(page, n) {
           const fromHref = idFromHref(a.getAttribute('href') || '')
           if (fromHref) return fromHref
         }
+        const textId = compact(root.textContent).match(/\bID\s*[:：]\s*(\d{5,24})\b/i)
+        if (textId) return textId[1]
         return null
       }
 
@@ -562,7 +572,140 @@ async function waitUntilCompassProductRowsReady(page, opts) {
 }
 
 /**
- * 单品卡：不修改日期，按曝光降序取前 topN。
+ * @param {import('playwright').Page} page
+ * @returns {Promise<{ serverError: boolean, noProductText: boolean, dateLabel: string }>}
+ */
+async function readCompassPageState(page) {
+  return safePageEvaluate(page, () => {
+    const body = String(document.body?.innerText || '')
+    const compact = (s) => String(s || '').replace(/\s+/g, ' ').trim()
+    const visible = (el) => {
+      if (!(el instanceof HTMLElement)) return false
+      const r = el.getBoundingClientRect()
+      const s = window.getComputedStyle(el)
+      return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'
+    }
+    const picker = Array.from(document.querySelectorAll('.arco-picker-range')).find(
+      (el) => visible(el) && !String(el.className || '').includes('disabled'),
+    )
+    const dateLabel =
+      compact(
+        picker?.querySelector('.arco-picker-prefix')?.textContent ||
+          picker?.textContent ||
+          document.querySelector('.arco-picker-prefix')?.textContent ||
+          '',
+      ) || ''
+    return {
+      serverError: /服务器错误|出了点问题|请稍后重试|Server\s*error/i.test(body),
+      noProductText: /暂无数据|暂无商品|没有商品|No\s+data|No\s+products/i.test(body),
+      dateLabel,
+    }
+  })
+}
+
+/**
+ * Compass 默认最近 7 天可能无商品或接口报错；此时切到最近 30 天再取数。
+ * @param {import('playwright').Page} page
+ */
+async function selectCompassLast30Days(page) {
+  const quickRangeRe = /最近\s*(?:28|30)\s*天|近\s*(?:28|30)\s*天|过去\s*(?:28|30)\s*天|Last\s*(?:28|30)\s*days/i
+  const alreadyLast30 = await readCompassPageState(page).then((s) => /(?:28|30)/.test(s.dateLabel)).catch(() => false)
+  if (alreadyLast30) return { ok: true, strategy: 'already-last30' }
+
+  let clickedPicker = false
+  const deadline = Date.now() + 30_000
+  while (!clickedPicker && Date.now() < deadline) {
+    const pickers = page.locator('.arco-picker-range')
+    const pickerCount = await pickers.count().catch(() => 0)
+    for (let i = 0; i < pickerCount; i += 1) {
+      const picker = pickers.nth(i)
+      const cls = (await picker.getAttribute('class').catch(() => '')) || ''
+      if (/disabled/i.test(cls)) continue
+      if (!(await picker.isVisible().catch(() => false))) continue
+      await picker.click({ timeout: 10_000 })
+      clickedPicker = true
+      break
+    }
+    if (!clickedPicker) await sleep(500)
+  }
+  if (!clickedPicker) {
+    clickedPicker = await safePageEvaluate(page, () => {
+      const visible = (el) => {
+        if (!(el instanceof HTMLElement)) return false
+        const r = el.getBoundingClientRect()
+        const s = window.getComputedStyle(el)
+        return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'
+      }
+      const picker = Array.from(document.querySelectorAll('.arco-picker-range')).find(
+        (el) => visible(el) && !String(el.className || '').includes('disabled'),
+      )
+      if (!(picker instanceof HTMLElement)) return false
+      picker.click()
+      return true
+    }).catch(() => false)
+  }
+  if (!clickedPicker) {
+    throw new Error('未找到可点击的 Compass 日期选择器')
+  }
+  await sleep(600)
+
+  const preset = page
+    .locator('button, [role="button"], li, span, div')
+    .filter({ hasText: quickRangeRe })
+    .last()
+
+  if ((await preset.count().catch(() => 0)) > 0 && (await preset.isVisible().catch(() => false))) {
+    await preset.click({ timeout: 10_000, force: true })
+  } else {
+    const clicked = await safePageEvaluate(page, () => {
+      const re = /最近\s*(?:28|30)\s*天|近\s*(?:28|30)\s*天|过去\s*(?:28|30)\s*天|Last\s*(?:28|30)\s*days/i
+      const visible = (el) => {
+        if (!(el instanceof HTMLElement)) return false
+        const r = el.getBoundingClientRect()
+        const s = window.getComputedStyle(el)
+        return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'
+      }
+      const candidates = Array.from(document.querySelectorAll('button, [role="button"], li, span, div'))
+        .filter((el) => visible(el) && re.test(el.textContent || ''))
+      const target = candidates.at(-1)
+      if (!target) return false
+      ;(target instanceof HTMLElement ? target : target.closest('button,[role="button"],li,span,div'))?.click()
+      return true
+    })
+    if (!clicked) {
+      throw new Error('未找到 Compass 日期快捷项「最近 30 天」')
+    }
+  }
+
+  await sleep(1000)
+  await page.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => {})
+  await page
+    .waitForFunction(
+      () => {
+        const visible = (el) => {
+          if (!(el instanceof HTMLElement)) return false
+          const r = el.getBoundingClientRect()
+          const s = window.getComputedStyle(el)
+          return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'
+        }
+        const picker = Array.from(document.querySelectorAll('.arco-picker-range')).find(
+          (el) => visible(el) && !String(el.className || '').includes('disabled'),
+        )
+        return /(?:28|30)/.test(picker?.textContent || '')
+      },
+      undefined,
+      { timeout: 10_000 },
+    )
+    .catch(() => {})
+  const afterState = await readCompassPageState(page)
+  if (!/(?:28|30)/.test(afterState.dateLabel)) {
+    throw new Error(`选择最近 30/28 天后日期仍未切换，当前显示：${afterState.dateLabel || '空'}`)
+  }
+  return { ok: true, strategy: /28/.test(afterState.dateLabel) ? 'quick-range-last28' : 'quick-range-last30' }
+}
+
+/**
+ * 单品卡：默认不修改日期；若默认最近 7 天无商品或服务端错误，则切到最近 30 天后重试。
  * @param {import('playwright').Page} page
  * @param {{ pageUrl: string, shopRegion: string, topN: number }} opts
  */
@@ -575,16 +718,34 @@ async function runCompassTopProductsDefaultDate(page, opts) {
   await sleep(READY_AFTER_VISIBLE_MS)
 
   await showPageToast(page, `[脚本] Compass：等待表格行数据（ID/主图/标题）就绪…`)
-  await waitUntilCompassProductRowsReady(page, {
+  let dateFallback = null
+  let preSortReady = await waitUntilCompassProductRowsReady(page, {
     topN: opts.topN,
     timeoutMs: COMPASS_PRE_SORT_ROWS_TIMEOUT_MS,
     minRows: 1,
   })
 
+  let pageState = await readCompassPageState(page).catch(() => ({ serverError: false, noProductText: false, dateLabel: '' }))
+  if (!preSortReady.ok || pageState.serverError || pageState.noProductText) {
+    const reason = pageState.serverError ? 'server_error' : pageState.noProductText ? 'no_product_text' : 'no_rows'
+    await showPageToast(page, `[脚本] Compass：默认日期未获取到商品（${reason}），切换到最近 30 天/28 天重试…`)
+    dateFallback = {
+      reason,
+      fromLabel: pageState.dateLabel,
+      ...(await selectCompassLast30Days(page)),
+    }
+    preSortReady = await waitUntilCompassProductRowsReady(page, {
+      topN: opts.topN,
+      timeoutMs: COMPASS_POST_SORT_ROWS_TIMEOUT_MS,
+      minRows: 1,
+    })
+    pageState = await readCompassPageState(page).catch(() => ({ serverError: false, noProductText: false, dateLabel: '' }))
+  }
+
   const sortMeta = await trySortByExposureUsersDescending(page)
 
   await showPageToast(page, `[脚本] Compass：排序后等待表格刷新…`)
-  await waitUntilCompassProductRowsReady(page, {
+  const postSortReady = await waitUntilCompassProductRowsReady(page, {
     topN: opts.topN,
     timeoutMs: COMPASS_POST_SORT_ROWS_TIMEOUT_MS,
     minRows: 1,
@@ -592,7 +753,7 @@ async function runCompassTopProductsDefaultDate(page, opts) {
 
   const rows = await extractTopProductRows(page, opts.topN)
 
-  const pageDateRange = await page.evaluate(() => {
+  const pageDateRange = await safePageEvaluate(page, () => {
     const body = document.body.innerText || ''
     const m = body.match(
       /(\d{4}[\/.\-]\d{1,2}[\/.\-]\d{1,2})\s*[-–~至到]\s*(\d{4}[\/.\-]\d{1,2}[\/.\-]\d{1,2})/,
@@ -620,7 +781,12 @@ async function runCompassTopProductsDefaultDate(page, opts) {
     shopRegionUrlMatchesArg: regionCodeEq(navMeta.urlShopRegion, opts.shopRegion),
     shopRegion: opts.shopRegion || '',
     pageDateRange,
-    note: '未改动页面日期筛选，统计区间为 Compass 默认展示区间。',
+    note: dateFallback
+      ? '默认日期未取到商品或页面报错，已切换到最近 30 天/28 天后重试。'
+      : '未改动页面日期筛选，统计区间为 Compass 默认展示区间。',
+    dateFallback,
+    preSortReady,
+    postSortReady,
     sortExposureUsers: sortMeta,
     topN: opts.topN,
     products: ranked,
@@ -689,6 +855,48 @@ async function clickRowUntilConfirmEnabled(productDialog, row) {
 }
 
 /**
+ * 新版商品选择弹窗的「商品 ID」搜索框不是标准 searchbox，仅按 Enter 偶尔不触发查询。
+ * 这里同时派发原生 input/change、Enter，并点击输入框右侧放大镜 suffix。
+ * @param {import('playwright').Locator} input
+ * @param {string} id
+ */
+async function triggerProductPickerSearch(input, id) {
+  await input.click({ timeout: 10_000 })
+  await input.fill(id)
+  await input.evaluate((el, value) => {
+    const inputEl = /** @type {HTMLInputElement} */ (el)
+    const proto = Object.getPrototypeOf(inputEl)
+    const descriptor = Object.getOwnPropertyDescriptor(proto, 'value')
+    descriptor?.set?.call(inputEl, value)
+    inputEl.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }))
+    inputEl.dispatchEvent(new Event('change', { bubbles: true }))
+  }, id)
+  await input.press('Enter').catch(() => {})
+  await sleep(250)
+
+  await input.evaluate((el) => {
+    const inputEl = /** @type {HTMLElement} */ (el)
+    const wrapper =
+      inputEl.closest('.core-input-group-wrapper, .arco-input-group-wrapper, [class*="input-group"]') ||
+      inputEl.parentElement
+    const suffix = wrapper?.querySelector(
+      '.core-input-group-suffix, .arco-input-suffix, [class*="suffix"], svg',
+    )
+    const target = suffix instanceof HTMLElement ? suffix : suffix?.closest?.('span,button,div')
+    if (target instanceof HTMLElement) {
+      target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }))
+      target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }))
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+    }
+  }).catch(() => {})
+
+  const box = await input.boundingBox().catch(() => null)
+  if (box) {
+    await input.page().mouse.click(box.x + box.width - 10, box.y + box.height / 2).catch(() => {})
+  }
+}
+
+/**
  * @param {import('playwright').Locator} productDialog
  * @param {string} productId
  */
@@ -715,9 +923,7 @@ async function selectProductRow(productDialog, productId) {
       if (cnt > 0) {
         const input = loc.first()
         if (await input.isVisible().catch(() => false)) {
-          await input.click()
-          await input.fill(id)
-          await input.press('Enter')
+          await triggerProductPickerSearch(input, id)
           await sleep(500)
           await productDialog
             .locator('table tbody tr')
@@ -767,7 +973,20 @@ function locatorAiVideoGeneratorDialog(page) {
   return page
     .getByRole('dialog')
     .filter({ hasText: /AI 视频生成器/ })
-    .filter({ has: page.getByRole('button', { name: /生成视频/ }) })
+    .filter({ hasText: /选择一款商品|今日剩余|AI 信用额度|生成视频/ })
+}
+
+/**
+ * 新版 AI 视频生成器把最终按钮从「生成视频」改成了「确认 (1 点信用额度)」。
+ * 保持旧文案兼容，同时避免在商品选择弹窗内误点普通「确认」。
+ * @param {import('playwright').Locator} mainDialog
+ */
+function locatorAiVideoSubmitButton(mainDialog) {
+  return mainDialog
+    .getByRole('button', {
+      name: /生成\s*\d*\s*个视频|生成视频|确认\s*[（(][^）)]*(AI\s*)?信用额度[^）)]*[）)]/i,
+    })
+    .last()
 }
 
 /** AI 信用额度用尽时终止整次任务（主循环识别 `code`） */
@@ -1040,7 +1259,9 @@ async function runAiVideoFlow(page, opts) {
   await mainDialog.waitFor({ state: 'visible', timeout: 45_000 })
   await sleep(READY_AFTER_VISIBLE_MS)
   await showPageToast(page, `[脚本] 已选品 · 正在点击生成视频`)
-  await mainDialog.getByRole('button', { name: /生成视频/ }).click()
+  const submitButton = locatorAiVideoSubmitButton(mainDialog)
+  await submitButton.waitFor({ state: 'visible', timeout: 30_000 })
+  await submitButton.click()
 
   await mainDialog.getByText('正在生成视频').waitFor({ timeout: 30_000 })
   await showPageToast(page, `[脚本] 正在生成视频（商品 ${productId}）`)
@@ -1129,6 +1350,8 @@ async function run() {
   const baseUrl = getArgValue('--baseUrl') || DEFAULT_BASE_URL
   const headed = hasFlag('--headed')
   const keepOpen = hasFlag('--keepOpen')
+  const showResultModal = hasFlag('--showResultModal') || (!useLaunchApi && !hasFlag('--noResultModal'))
+  const failOnPartial = hasFlag('--failOnPartial')
   const cdpUrl =
     getArgValue('--cdp') || process.env.PLAYWRIGHT_CDP_URL || process.env.CDP_URL || ''
   const launchEdge = hasFlag('--launch-edge') || hasFlag('--msedge')
@@ -1162,6 +1385,8 @@ async function run() {
     /** 多区域时收集分项，最后只弹一次汇总 Modal */
     /** @type {Array<{ shopRegion: string, ok: boolean, kind: 'compass' | 'ai', lines: string[] }>} */
     const multiReport = []
+    /** @type {Array<Record<string, unknown>>} */
+    const regionResults = []
 
     for (let ri = 0; ri < totalRegions; ri += 1) {
       const flow = buildFlowForShopRegion(shared.shopRegions[ri], shared)
@@ -1180,6 +1405,14 @@ async function run() {
       })
 
       if (!compass.ok || compass.products.length === 0) {
+        const compassResult = {
+          ok: false,
+          phase: 'compass',
+          multiRegion: totalRegions > 1 ? { index: ri + 1, total: totalRegions } : undefined,
+          shopRegion: flow.shopRegion,
+          compass,
+        }
+        regionResults.push(compassResult)
         await showPageToast(
           page,
           totalRegions > 1
@@ -1188,13 +1421,7 @@ async function run() {
         )
         console.log(
           JSON.stringify(
-            {
-              ok: false,
-              phase: 'compass',
-              multiRegion: totalRegions > 1 ? { index: ri + 1, total: totalRegions } : undefined,
-              shopRegion: flow.shopRegion,
-              compass,
-            },
+            compassResult,
             null,
             2,
           ),
@@ -1211,7 +1438,7 @@ async function run() {
               ...(compass.hint ? [`说明：${compass.hint}`] : []),
             ],
           })
-        } else {
+        } else if (showResultModal) {
           try {
             await showPageResultModalUntilAck(page, {
               title: 'Compass 阶段失败',
@@ -1346,29 +1573,32 @@ async function run() {
       modalLines.push('')
       modalLines.push('终端已输出完整 JSON；点击「确定」后关闭此窗口。')
 
+      const regionResult = {
+        ok: aiVideoComplete,
+        stopReason,
+        shopRegion: flow.shopRegion,
+        multiRegion: totalRegions > 1 ? { index: ri + 1, total: totalRegions } : undefined,
+        topN: flow.topN,
+        pickN: flow.pickN,
+        aiVideoSuccessCount: aiVideoRuns.length,
+        aiVideoSkippedCount: aiVideoSkipped.length,
+        compassCandidateCount: compass.products.length,
+        compass,
+        pickedProductIds,
+        pickedProducts,
+        aiVideoRuns,
+        aiVideoSkipped,
+        ...(aiVideoComplete
+          ? {}
+          : {
+              hint: resultHint,
+            }),
+      }
+      regionResults.push(regionResult)
+
       console.log(
         JSON.stringify(
-          {
-            ok: aiVideoComplete,
-            stopReason,
-            shopRegion: flow.shopRegion,
-            multiRegion: totalRegions > 1 ? { index: ri + 1, total: totalRegions } : undefined,
-            topN: flow.topN,
-            pickN: flow.pickN,
-            aiVideoSuccessCount: aiVideoRuns.length,
-            aiVideoSkippedCount: aiVideoSkipped.length,
-            compassCandidateCount: compass.products.length,
-            compass,
-            pickedProductIds,
-            pickedProducts,
-            aiVideoRuns,
-            aiVideoSkipped,
-            ...(aiVideoComplete
-              ? {}
-              : {
-                  hint: resultHint,
-                }),
-          },
+          regionResult,
           null,
           2,
         ),
@@ -1389,7 +1619,7 @@ async function run() {
             `成功商品 ID：${pickedProductIds.length ? pickedProductIds.join(', ') : '（无）'}`,
           ],
         })
-      } else {
+      } else if (showResultModal) {
         try {
           await showPageResultModalUntilAck(page, {
             title: modalTitle,
@@ -1413,8 +1643,28 @@ async function run() {
       }
     }
 
-    if (totalRegions > 1 && multiReport.length > 0) {
+    if (multiReport.length > 0) {
       const allOk = multiReport.every((r) => r.ok)
+      const finalResult = {
+        ok: allOk,
+        status: allOk ? 'success' : 'partial',
+        folderId: SCRIPT_DIR,
+        totalRegions,
+        regions: regionResults,
+        summary: multiReport.map((r) => ({
+          shopRegion: r.shopRegion,
+          ok: r.ok,
+          kind: r.kind,
+          lines: r.lines,
+        })),
+      }
+      console.log(`scriptResult: ${JSON.stringify(finalResult)}`)
+      if (useLaunchApi && !failOnPartial) {
+        process.exitCode = 0
+      }
+      if (totalRegions <= 1) {
+        return
+      }
       /** 本回合至少进入过汇总（Compass 或 AI）的国家 */
       const ranRegionCodes = [...new Set(multiReport.map((r) => r.shopRegion))]
       let summaryTitle = '任务已结束（部分未完成）'
@@ -1437,16 +1687,18 @@ async function run() {
         summaryLines.push(...r.lines.map((line) => `  ${line}`))
         summaryLines.push('')
       }
-      summaryLines.push('点击「确定」关闭此窗口。')
-      if (!allOk) process.exitCode = 1
-      try {
-        await showPageResultModalUntilAck(page, {
-          title: summaryTitle,
-          variant: summaryVariant,
-          lines: summaryLines,
-        })
-      } catch {
-        /* 页面不可用时仍可依赖终端输出 */
+      summaryLines.push(showResultModal ? '点击「确定」关闭此窗口。' : '自动化模式不等待结果弹窗。')
+      if (!allOk && (!useLaunchApi || failOnPartial)) process.exitCode = 1
+      if (showResultModal) {
+        try {
+          await showPageResultModalUntilAck(page, {
+            title: summaryTitle,
+            variant: summaryVariant,
+            lines: summaryLines,
+          })
+        } catch {
+          /* 页面不可用时仍可依赖终端输出 */
+        }
       }
     }
 

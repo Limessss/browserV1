@@ -1169,6 +1169,7 @@ async function run() {
   const baseUrl = getArgValue('--baseUrl') || DEFAULT_LAUNCH_BASE_URL
   const cdpUrl = getArgValue('--cdp') || process.env.PLAYWRIGHT_CDP_URL || process.env.CDP_URL || ''
   const keepOpen = hasFlag('--keepOpen')
+  const showResultModal = hasFlag('--showResultModal') || (!useLaunchApi && !hasFlag('--noResultModal'))
   const topN = getNumberArg('--topN', DEFAULT_TOP_N)
   const keywordLimit = getNumberArg('--limit', DEFAULT_KEYWORD_LIMIT)
   const leadPageSize = getNumberArg('--leadPageSize', DEFAULT_LEAD_PAGE_SIZE)
@@ -1267,6 +1268,9 @@ async function run() {
   // 弹汇总 modal
   const anyOk = allReports.some((r) => r.ok)
   const anyErr = allReports.some((r) => r.errors && r.errors.length)
+  summary.status = anyOk ? (summary.ok ? 'success' : 'partial') : 'failed'
+  summary.summaryPath = summaryPath
+  console.log(`scriptResult: ${JSON.stringify(summary)}`)
   const lastReport = allReports[allReports.length - 1]
   const lines = shopRegions.length === 1
     ? buildReportLines(lastReport)
@@ -1288,7 +1292,7 @@ async function run() {
 
   // 弹 modal：直接用 runForRegion 返回的最后一个 region 的 page/conn
   // 之前"兜底重开浏览器"那段已删——runForRegion 100% 会返回 page
-  if (lastPage) {
+  if (showResultModal && lastPage) {
     try {
       await showPageResultModalUntilAck(lastPage, {
         title, variant, lines,

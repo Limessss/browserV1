@@ -562,6 +562,8 @@ async function runForRegion(page, shopRegion, options) {
 async function main() {
   const shopRegions = parseShopRegions(getArgValue('--shop_region'))
   const keepOpen = hasFlag('--keepOpen')
+  const useLaunchApi = hasFlag('--useLaunchApi')
+  const showResultModal = hasFlag('--showResultModal') || (!useLaunchApi && !hasFlag('--noResultModal'))
   const maxRuntimeMs = getNumberArg('--max_runtime_ms', 0)
   const totalRegions = shopRegions.length
   const options = {
@@ -616,8 +618,9 @@ async function main() {
     }
     console.log(JSON.stringify(summary, null, 2))
     if (!allOk) process.exitCode = 1
+    console.log(`scriptResult: ${JSON.stringify({ ...summary, status: allOk ? 'success' : 'failed', folderId: SCRIPT_DIR })}`)
 
-    if (totalRegions === 1) {
+    if (showResultModal && totalRegions === 1) {
       const result = results[0]
       await showPageResultModalUntilAck(page, {
         title: result.ok ? '任务已完成' : '任务结束',
@@ -628,7 +631,7 @@ async function main() {
           '终端已输出完整 JSON。点击「确定」关闭。',
         ],
       })
-    } else if (results.length > 0) {
+    } else if (showResultModal && results.length > 0) {
       const summaryLines = [
         `配置区域（共 ${totalRegions} 个）：${shopRegions.join('、')}`,
         `已执行区域：${results.map((item) => item.shopRegion).join('、')}`,

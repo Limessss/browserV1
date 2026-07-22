@@ -360,7 +360,7 @@ export function AutomationPage() {
             <CodeBlock text={samplePlaywrightRunRequest} />
             <p className="mt-3 text-sm text-[var(--color-text-secondary)]">
               先 <code>GET /api/playwright-scripts</code> 查看 <code>folderId</code> 与 <code>defaultArgs</code>；<code>extraArgs</code> 会拼在 manifest 默认参数之后。返回 <code>runId</code> 后可用{' '}
-              <code>{'DELETE /api/playwright-scripts/run/{runId}'}</code> 终止。标准输出在应用内「自动化脚本」日志区查看。
+              <code>{'GET /api/playwright-scripts/run/{runId}'}</code> 查询状态和日志，或用 <code>{'DELETE /api/playwright-scripts/run/{runId}'}</code> 终止。
             </p>
           </Card>
         </div>

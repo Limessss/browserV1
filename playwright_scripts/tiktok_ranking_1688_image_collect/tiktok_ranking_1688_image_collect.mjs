@@ -658,6 +658,7 @@ async function run() {
   const launchEdge = hasFlag('--launch-edge')
   const headed = hasFlag('--headed')
   const keepOpen = hasFlag('--keepOpen')
+  const showResultModal = hasFlag('--showResultModal') || (!useLaunchApi && !hasFlag('--noResultModal'))
   const skipMark = hasFlag('--skipMark')
 
   const baseUrl = getArgValue('--baseUrl') || DEFAULT_BASE_URL
@@ -822,8 +823,9 @@ async function run() {
       markDeveloped: markPayload,
     }
     console.log(JSON.stringify(payload, null, 2))
+    console.log(`scriptResult: ${JSON.stringify({ ...payload, status: 'success', folderId: path.dirname(fileURLToPath(import.meta.url)) })}`)
 
-    await showPageResultModalUntilAck(page, {
+    if (showResultModal) await showPageResultModalUntilAck(page, {
       title: '榜单图搜采集已完成',
       variant: 'success',
       lines: [...buildCollectResultLines(collectResults, picked, skipMark), '', '终端已输出完整 JSON。点击「确定」关闭。'],
@@ -833,9 +835,11 @@ async function run() {
   } catch (e) {
     process.exitCode = 1
     const message = e instanceof Error ? e.message : String(e)
-    console.error(JSON.stringify({ ok: false, error: message, collectResults }, null, 2))
+    const result = { ok: false, status: 'failed', folderId: path.dirname(fileURLToPath(import.meta.url)), error: message, collectResults }
+    console.error(JSON.stringify(result, null, 2))
+    console.log(`scriptResult: ${JSON.stringify(result)}`)
     try {
-      await showPageResultModalUntilAck(page, {
+      if (showResultModal) await showPageResultModalUntilAck(page, {
         title: '榜单图搜采集异常结束',
         variant: 'danger',
         lines: [

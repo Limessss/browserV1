@@ -70,7 +70,132 @@ export interface ListPlaywrightScriptsResult {
   warnings: string[]
 }
 
+type PlaywrightScriptRunStatus = 'running' | 'success' | 'failed' | 'canceled'
+
+export interface PlaywrightScriptRunInfo {
+  runId: string
+  folderId: string
+  status: PlaywrightScriptRunStatus
+  pid: number | null
+  command: string
+  args: string[]
+  startedAt: string
+  finishedAt: string | null
+  code: number | null
+  signal: string
+  stdout: string
+  stderr: string
+  stdoutBytes: number
+  stderrBytes: number
+  truncated: boolean
+  killRequested: boolean
+  scriptResult: unknown | null
+  scriptResultRaw: string
+}
+
 const runs = new Map<string, ChildProcess>()
+const runInfos = new Map<string, PlaywrightScriptRunInfo>()
+const MAX_RUN_HISTORY = 200
+const MAX_STREAM_CHARS = 500_000
+
+function appendRunOutput(runId: string, stream: 'stdout' | 'stderr', text: string): void {
+  const info = runInfos.get(runId)
+  if (!info || !text) return
+  const key = stream
+  const bytesKey = stream === 'stdout' ? 'stdoutBytes' : 'stderrBytes'
+  info[bytesKey] += Buffer.byteLength(text, 'utf8')
+  const next = `${info[key]}${text}`
+  if (next.length > MAX_STREAM_CHARS) {
+    info[key] = next.slice(next.length - MAX_STREAM_CHARS)
+    info.truncated = true
+  } else {
+    info[key] = next
+  }
+}
+
+function parseScriptResult(stdout: string): { value: unknown | null; raw: string } {
+  const lines = String(stdout || '').split(/\r?\n/)
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i]?.trim() ?? ''
+    const match = /^scriptResult(?:\s*[:=]\s*|\s+)(.+)$/i.exec(line)
+    if (!match) continue
+    const raw = match[1].trim()
+    if (!raw) return { value: null, raw }
+    try {
+      return { value: JSON.parse(raw), raw }
+    } catch {
+      return { value: raw, raw }
+    }
+  }
+  return { value: null, raw: '' }
+}
+
+function trimRunHistory(): void {
+  const finished = [...runInfos.values()]
+    .filter((run) => run.status !== 'running')
+    .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
+  while (runInfos.size > MAX_RUN_HISTORY && finished.length > 0) {
+    const run = finished.shift()
+    if (run) runInfos.delete(run.runId)
+  }
+}
+
+function finishRunInfo(
+  runId: string,
+  code: number | null,
+  signal: NodeJS.Signals | string | null,
+): PlaywrightScriptRunInfo | null {
+  const info = runInfos.get(runId)
+  if (!info || info.status !== 'running') return info ?? null
+  info.finishedAt = new Date().toISOString()
+  info.code = code
+  info.signal = signal ? String(signal) : ''
+  if (info.killRequested) {
+    info.status = 'canceled'
+  } else {
+    info.status = code === 0 ? 'success' : 'failed'
+  }
+  const parsed = parseScriptResult(info.stdout)
+  info.scriptResult = parsed.value
+  info.scriptResultRaw = parsed.raw
+  trimRunHistory()
+  return info
+}
+
+function finishRunInfoFromScriptResult(runId: string): PlaywrightScriptRunInfo | null {
+  const info = runInfos.get(runId)
+  if (!info || info.status !== 'running') return info ?? null
+  const parsed = parseScriptResult(info.stdout)
+  if (!parsed.raw) return info
+  info.finishedAt = new Date().toISOString()
+  info.code = 0
+  info.signal = ''
+  info.scriptResult = parsed.value
+  info.scriptResultRaw = parsed.raw
+  const resultStatus =
+    isRecord(parsed.value) && typeof parsed.value.status === 'string'
+      ? parsed.value.status.toLowerCase()
+      : ''
+  const resultOk = isRecord(parsed.value) && typeof parsed.value.ok === 'boolean' ? parsed.value.ok : null
+  info.status =
+    resultStatus === 'failed' || resultStatus === 'error' || resultOk === false
+      ? 'failed'
+      : 'success'
+  trimRunHistory()
+  return info
+}
+
+export function getPlaywrightScriptRunInfo(runId: string): PlaywrightScriptRunInfo | null {
+  const id = String(runId ?? '').trim()
+  return id ? (runInfos.get(id) ?? null) : null
+}
+
+export function listPlaywrightScriptRunInfos(limit = 50): PlaywrightScriptRunInfo[] {
+  const max = Math.max(1, Math.min(200, Number.isFinite(limit) ? Math.floor(limit) : 50))
+  return [...runInfos.values()]
+    .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
+    .slice(0, max)
+}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === 'object' && !Array.isArray(v)
@@ -464,11 +589,10 @@ export async function runPlaywrightScript(
   const effectiveDefaults = getEffectiveDefaultArgs(script, userDefaults)
 
   const appRoot = resolveAppRelativePath('.')
-  // 与「命令行只打一遍参数」一致：各 .mjs 里 getArgValue 多取 **首个** 出现的 flag。
-  // 故「自动化页」的附加参数必须排在 script.json 的 defaultArgs **之前**，
-  // 否则 --shop_region 等会被默认里的值盖住（先出现的是 PH，用户填的 MY 被忽略）。
-  // 用户于参数面板保存的 defaultArgs（_user_defaults）优先于 script.json。
-  const args = [script.entryPath, ...extra, ...effectiveDefaults]
+  // 自动化调用传入 extraArgs 时，调用方已经给出完整参数，不再叠加默认参数。
+  // 否则日志里会出现两套 --code / --shop_region，虽然首个参数通常生效，但排查时很容易误判。
+  const scriptArgs = extra.length > 0 ? extra : effectiveDefaults
+  const args = [script.entryPath, ...scriptArgs]
   const nodeRunner = resolveNodeRunner()
   const runId = randomUUID()
 
@@ -480,10 +604,47 @@ export async function runPlaywrightScript(
   })
 
   runs.set(runId, child)
+  runInfos.set(runId, {
+    runId,
+    folderId: fid,
+    status: 'running',
+    pid: child.pid ?? null,
+    command: nodeRunner.command,
+    args,
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    code: null,
+    signal: '',
+    stdout: '',
+    stderr: '',
+    stdoutBytes: 0,
+    stderrBytes: 0,
+    truncated: false,
+    killRequested: false,
+    scriptResult: null,
+    scriptResultRaw: '',
+  })
+  trimRunHistory()
 
   const hashChunk = (stream: 'stdout' | 'stderr', buf: Buffer) => {
     const text = buf.toString('utf8')
     if (!text) return
+    appendRunOutput(runId, stream, text)
+    if (stream === 'stdout') {
+      const completed = finishRunInfoFromScriptResult(runId)
+      if (completed && completed.status !== 'running') {
+        runs.delete(runId)
+        setTimeout(() => {
+          try {
+            if (child.exitCode === null && child.signalCode === null && !child.killed) {
+              child.kill()
+            }
+          } catch {
+            /* ignore */
+          }
+        }, 10_000)
+      }
+    }
     emitWailsEvent('playwright:script:chunk', {
       runId,
       folderId: fid,
@@ -501,16 +662,23 @@ export async function runPlaywrightScript(
 
   const finish = (code: number | null, signal: NodeJS.Signals | null) => {
     runs.delete(runId)
+    const info = finishRunInfo(runId, code, signal)
     emitWailsEvent('playwright:script:exit', {
       runId,
       folderId: fid,
-      code: code ?? -1,
-      signal: signal ?? '',
+      code: info?.code ?? code ?? -1,
+      signal: info?.signal ?? signal ?? '',
     })
   }
 
   child.on('error', (err) => {
     runs.delete(runId)
+    appendRunOutput(
+      runId,
+      'stderr',
+      `[spawn error] ${err instanceof Error ? err.message : String(err)}\n`,
+    )
+    const info = finishRunInfo(runId, -1, '')
     emitWailsEvent('playwright:script:chunk', {
       runId,
       folderId: fid,
@@ -520,8 +688,8 @@ export async function runPlaywrightScript(
     emitWailsEvent('playwright:script:exit', {
       runId,
       folderId: fid,
-      code: -1,
-      signal: '',
+      code: info?.code ?? -1,
+      signal: info?.signal ?? '',
     })
   })
 
@@ -539,6 +707,8 @@ export function killPlaywrightScriptRun(runId: string): boolean {
   if (!child || child.killed) {
     return false
   }
+  const info = runInfos.get(id)
+  if (info) info.killRequested = true
   try {
     if (process.platform === 'win32') {
       child.kill()
